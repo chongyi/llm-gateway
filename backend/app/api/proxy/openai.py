@@ -9,10 +9,41 @@ from typing import Any
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from app.api.deps import CurrentApiKey, ProxyServiceDep
+from app.api.deps import CurrentApiKey, ProxyServiceDep, ModelServiceDep
 from app.common.errors import AppError
 
 router = APIRouter(tags=["OpenAI Proxy"])
+
+
+@router.get("/v1/models")
+async def list_models(
+    api_key: CurrentApiKey,
+    model_service: ModelServiceDep,
+) -> Any:
+    """
+    OpenAI List Models 代理接口
+    
+    返回配置的可用模型列表。
+    """
+    mappings, _ = await model_service.get_all_mappings(
+        is_active=True,
+        page=1,
+        page_size=1000
+    )
+    
+    data = []
+    for mapping in mappings:
+        data.append({
+            "id": mapping.requested_model,
+            "object": "model",
+            "created": int(mapping.created_at.timestamp()),
+            "owned_by": "system",
+        })
+        
+    return {
+        "object": "list",
+        "data": data
+    }
 
 
 @router.post("/v1/chat/completions")
