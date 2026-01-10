@@ -65,7 +65,51 @@ async def chat_completions(
     headers = dict(request.headers)
     
     try:
-        # 处理请求
+        if body.get("stream", False):
+            # 处理流式请求
+            initial_response, stream_generator, log_info = await proxy_service.process_request_stream(
+                api_key_id=api_key.id,
+                api_key_name=api_key.key_name,
+                path="/v1/chat/completions",
+                method="POST",
+                headers=headers,
+                body=body,
+            )
+            
+            if initial_response.is_success:
+                return StreamingResponse(
+                    stream_generator,
+                    media_type="text/event-stream",
+                    headers={
+                        "X-Trace-ID": log_info.get("trace_id", ""),
+                        "X-Target-Model": log_info.get("target_model", ""),
+                        "X-Provider": log_info.get("provider_name", ""),
+                    },
+                    status_code=initial_response.status_code,
+                )
+            else:
+                # 如果初始响应失败，收集错误信息并返回 JSON
+                content = b""
+                async for chunk in stream_generator:
+                    content += chunk
+                    
+                try:
+                    import json
+                    content_data = json.loads(content)
+                except Exception:
+                    content_data = {"error": {"message": content.decode("utf-8", errors="ignore")}}
+                
+                return JSONResponse(
+                    content=content_data,
+                    status_code=initial_response.status_code,
+                    headers={
+                        "X-Trace-ID": log_info.get("trace_id", ""),
+                        "X-Target-Model": log_info.get("target_model", ""),
+                        "X-Provider": log_info.get("provider_name", ""),
+                    },
+                )
+        
+        # 处理普通请求
         response, log_info = await proxy_service.process_request(
             api_key_id=api_key.id,
             api_key_name=api_key.key_name,
