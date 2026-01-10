@@ -93,16 +93,16 @@ export function LogFilters({
         <div className="space-y-2">
           <Label>供应商</Label>
           <Select
-            value={filters.provider_id ? String(filters.provider_id) : ''}
+            value={filters.provider_id ? String(filters.provider_id) : 'all'}
             onValueChange={(value) =>
-              updateFilter('provider_id', value ? Number(value) : undefined)
+              updateFilter('provider_id', value === 'all' ? undefined : Number(value))
             }
           >
             <SelectTrigger>
               <SelectValue placeholder="全部" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">全部</SelectItem>
+              <SelectItem value="all">全部</SelectItem>
               {providers.map((p) => (
                 <SelectItem key={p.id} value={String(p.id)}>
                   {p.name}
@@ -135,16 +135,16 @@ export function LogFilters({
         <div className="space-y-2">
           <Label>是否有错误</Label>
           <Select
-            value={filters.has_error === undefined ? '' : String(filters.has_error)}
+            value={filters.has_error === undefined ? 'all' : String(filters.has_error)}
             onValueChange={(value) =>
-              updateFilter('has_error', value === '' ? undefined : value === 'true')
+              updateFilter('has_error', value === 'all' ? undefined : value === 'true')
             }
           >
             <SelectTrigger>
               <SelectValue placeholder="全部" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">全部</SelectItem>
+              <SelectItem value="all">全部</SelectItem>
               <SelectItem value="true">有错误</SelectItem>
               <SelectItem value="false">无错误</SelectItem>
             </SelectContent>
