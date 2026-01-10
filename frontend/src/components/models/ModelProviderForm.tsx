@@ -6,6 +6,7 @@
 'use client';
 
 import React, { useEffect } from 'react';
+import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import {
   Dialog,
@@ -199,23 +200,33 @@ export function ModelProviderForm({
             <Label>
               供应商 <span className="text-destructive">*</span>
             </Label>
-            <Select
-              value={providerId}
-              onValueChange={(value) => setValue('provider_id', value)}
-              disabled={isEdit}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="选择供应商" />
-              </SelectTrigger>
-              <SelectContent>
-                {providers.map((provider) => (
-                  <SelectItem key={provider.id} value={String(provider.id)}>
-                    {provider.name} ({provider.protocol})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {!providerId && !isEdit && (
+            {providers.length === 0 && !isEdit ? (
+              <div className="text-sm text-muted-foreground p-2 border rounded-md bg-muted/50">
+                暂无可用供应商，请先
+                <Link href="/providers" className="text-primary hover:underline mx-1">
+                  创建供应商
+                </Link>
+                后再配置。
+              </div>
+            ) : (
+              <Select
+                value={providerId}
+                onValueChange={(value) => setValue('provider_id', value)}
+                disabled={isEdit}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="选择供应商" />
+                </SelectTrigger>
+                <SelectContent>
+                  {providers.map((provider) => (
+                    <SelectItem key={provider.id} value={String(provider.id)}>
+                      {provider.name} ({provider.protocol})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {!providerId && !isEdit && providers.length > 0 && (
               <p className="text-sm text-destructive">请选择供应商</p>
             )}
           </div>

@@ -54,7 +54,8 @@ export default function ModelDetailPage() {
 
   // 数据查询
   const { data: model, isLoading, isError, refetch } = useModel(requestedModel);
-  const { data: providersData } = useProviders({ is_active: true });
+  // 获取所有供应商，不过滤激活状态，以便配置
+  const { data: providersData } = useProviders();
 
   // Mutations
   const createMutation = useCreateModelProvider();
@@ -97,6 +98,7 @@ export default function ModelDetailPage() {
       refetch();
     } catch (error) {
       console.error('保存失败:', error);
+      alert('保存失败，请检查输入或重试');
     }
   };
 
