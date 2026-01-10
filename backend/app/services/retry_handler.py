@@ -153,6 +153,95 @@ class RetryHandler:
             final_provider=last_provider,  # type: ignore
             success=False,
         )
+
+    async def execute_with_retry_stream(
+        self,
+        candidates: list[CandidateProvider],
+        requested_model: str,
+        forward_stream_fn: Callable[[CandidateProvider], Any],
+    ) -> Any:
+        """
+        带重试的流式请求执行
+        
+        Args:
+            candidates: 候选供应商列表
+            requested_model: 请求的模型名
+            forward_stream_fn: 流式转发函数
+            
+        Yields:
+            tuple[bytes, ProviderResponse, CandidateProvider, int]: (数据块, 响应信息, 最终供应商, 重试次数)
+        """
+        if not candidates:
+            yield b"", ProviderResponse(
+                status_code=503,
+                error="No available providers",
+            ), None, 0
+            return
+            
+        tried_providers: set[int] = set()
+        total_retry_count = 0
+        last_chunk: bytes = b""
+        last_response: Optional[ProviderResponse] = None
+        last_provider: Optional[CandidateProvider] = None
+        
+        current_provider = await self.strategy.select(candidates, requested_model)
+        
+        while current_provider is not None:
+            tried_providers.add(current_provider.provider_id)
+            last_provider = current_provider
+            same_provider_retries = 0
+            
+            while same_provider_retries < self.max_retries:
+                try:
+                    # 获取生成器
+                    generator = forward_stream_fn(current_provider)
+                    # 获取第一个块
+                    chunk, response = await anext(generator)
+                    last_response = response
+                    last_chunk = chunk
+                    
+                    if response.is_success:
+                        # 成功，返回后续数据
+                        yield chunk, response, current_provider, total_retry_count
+                        async for chunk, response in generator:
+                            yield chunk, response, current_provider, total_retry_count
+                        return
+                    
+                    # 失败逻辑
+                    if response.is_server_error:
+                        same_provider_retries += 1
+                        total_retry_count += 1
+                        if same_provider_retries < self.max_retries:
+                            await asyncio.sleep(self.retry_delay_ms / 1000)
+                            continue
+                        else:
+                            break
+                    else:
+                        total_retry_count += 1
+                        break
+                        
+                except Exception as e:
+                    # 网络或其他异常
+                    same_provider_retries += 1
+                    total_retry_count += 1
+                    if same_provider_retries < self.max_retries:
+                        await asyncio.sleep(self.retry_delay_ms / 1000)
+                        continue
+                    else:
+                        break
+            
+            next_provider = await self._get_next_untried_provider(
+                candidates, tried_providers
+            )
+            if next_provider is None:
+                break
+            current_provider = next_provider
+            
+        # 全部失败，返回最后的错误
+        yield last_chunk, last_response or ProviderResponse(
+            status_code=503,
+            error="All providers failed",
+        ), last_provider, total_retry_count
     
     async def _get_next_untried_provider(
         self,

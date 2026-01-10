@@ -6,7 +6,7 @@
 
 import json
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Optional, AsyncGenerator
 
 from app.common.errors import NotFoundError, ServiceError
 from app.common.sanitizer import sanitize_headers
@@ -225,4 +225,140 @@ class ProxyService:
             "retry_count": result.retry_count,
             "target_model": result.final_provider.target_model if result.final_provider else None,
             "provider_name": result.final_provider.provider_name if result.final_provider else None,
+        }
+
+    async def process_request_stream(
+        self,
+        api_key_id: int,
+        api_key_name: str,
+        path: str,
+        method: str,
+        headers: dict[str, str],
+        body: dict[str, Any],
+    ) -> tuple[ProviderResponse, AsyncGenerator[bytes, None], dict[str, Any]]:
+        """
+        处理流式代理请求
+        
+        Args:
+            api_key_id: API Key ID
+            api_key_name: API Key 名称
+            path: 请求路径
+            method: HTTP 方法
+            headers: 请求头
+            body: 请求体
+        
+        Returns:
+            tuple: (初始响应, 流生成器, 日志信息)
+        """
+        trace_id = generate_trace_id()
+        request_time = datetime.utcnow()
+        
+        # 1-7. 同样的模型解析和规则匹配逻辑
+        requested_model = body.get("model")
+        if not requested_model:
+            raise ServiceError(message="Model is required", code="missing_model")
+            
+        model_mapping = await self.model_repo.get_mapping(requested_model)
+        if not model_mapping:
+            raise NotFoundError(message=f"Model '{requested_model}' not found", code="model_not_found")
+            
+        if not model_mapping.is_active:
+            raise ServiceError(message=f"Model '{requested_model}' disabled", code="model_disabled")
+            
+        provider_mappings = await self.model_repo.get_provider_mappings(requested_model, True)
+        if not provider_mappings:
+            raise ServiceError(message=f"No providers for '{requested_model}'", code="no_available_provider")
+            
+        provider_ids = [pm.provider_id for pm in provider_mappings]
+        providers = {}
+        for pid in provider_ids:
+            p = await self.provider_repo.get_by_id(pid)
+            if p:
+                providers[pid] = p
+                
+        # 计算输入 token
+        first_provider = providers.get(provider_mappings[0].provider_id)
+        protocol = first_provider.protocol if first_provider else "openai"
+        token_counter = get_token_counter(protocol)
+        messages = body.get("messages", [])
+        input_tokens = token_counter.count_messages(messages, requested_model)
+        
+        context = RuleContext(
+            current_model=requested_model,
+            headers=headers,
+            request_body=body,
+            token_usage=TokenUsage(input_tokens=input_tokens),
+        )
+        
+        candidates = await self.rule_engine.evaluate(
+            context, model_mapping, provider_mappings, providers
+        )
+        
+        if not candidates:
+            raise ServiceError(message="No matched providers", code="no_available_provider")
+            
+        # 8. 执行流式请求
+        def forward_stream_fn(candidate: CandidateProvider):
+            client = get_provider_client(candidate.protocol)
+            return client.forward_stream(
+                base_url=candidate.base_url,
+                api_key=candidate.api_key,
+                path=path,
+                method=method,
+                headers=headers,
+                body=body,
+                target_model=candidate.target_model,
+            )
+            
+        stream_gen = self.retry_handler.execute_with_retry_stream(
+            candidates, requested_model, forward_stream_fn
+        )
+        
+        # 获取第一个块以确定状态
+        try:
+            first_chunk, initial_response, final_provider, retry_count = await anext(stream_gen)
+        except StopAsyncIteration:
+            raise ServiceError(message="Stream ended unexpectedly", code="stream_error")
+        except Exception as e:
+            raise ServiceError(message=f"Stream connection error: {str(e)}", code="stream_error")
+
+        # 封装生成器以处理日志
+        async def wrapped_generator():
+            try:
+                yield first_chunk
+                async for chunk, _, _, _ in stream_gen:
+                    yield chunk
+            except Exception:
+                # 可以在这里记录流中断异常
+                pass
+            finally:
+                # 10. 记录日志 (流结束后)
+                # 注意：流式请求难以获取准确的 output_tokens 和完整的 response_body
+                log_data = RequestLogCreate(
+                    request_time=request_time,
+                    api_key_id=api_key_id,
+                    api_key_name=api_key_name,
+                    requested_model=requested_model,
+                    target_model=final_provider.target_model if final_provider else None,
+                    provider_id=final_provider.provider_id if final_provider else None,
+                    provider_name=final_provider.provider_name if final_provider else None,
+                    retry_count=retry_count,
+                    first_byte_delay_ms=initial_response.first_byte_delay_ms,
+                    total_time_ms=initial_response.total_time_ms, # 可能不准确，取决于 client 实现
+                    input_tokens=input_tokens,
+                    output_tokens=0, # 暂不支持流式 token 统计
+                    request_headers=sanitize_headers(headers),
+                    request_body=body,
+                    response_status=initial_response.status_code,
+                    response_body="[Stream Response]", 
+                    error_info=initial_response.error,
+                    trace_id=trace_id,
+                )
+                await self.log_repo.create(log_data)
+
+        return initial_response, wrapped_generator(), {
+            "trace_id": trace_id,
+            "retry_count": retry_count,
+            "target_model": final_provider.target_model if final_provider else None,
+            "provider_name": final_provider.provider_name if final_provider else None,
         }
