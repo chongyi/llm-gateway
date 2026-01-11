@@ -56,11 +56,15 @@ export function LogList({ logs }: LogListProps) {
               {formatDateTime(log.request_time, { showSeconds: true })}
             </TableCell>
             <TableCell>
-              <div className="flex items-center gap-1">
+              {log.requested_model === log.target_model ? (
                 <code className="text-sm">{log.requested_model || '-'}</code>
-                <ArrowRight className="h-3 w-3 text-muted-foreground" />
-                <code className="text-sm">{log.target_model || '-'}</code>
-              </div>
+              ) : (
+                <div className="flex items-center gap-1">
+                  <code className="text-sm">{log.requested_model || '-'}</code>
+                  <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                  <code className="text-sm">{log.target_model || '-'}</code>
+                </div>
+              )}
             </TableCell>
             <TableCell>{log.provider_name || '-'}</TableCell>
             <TableCell>
