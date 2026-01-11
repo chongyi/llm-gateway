@@ -21,7 +21,11 @@ Added stream mode indicator to the log list display and reorganized columns for 
 - Set `is_stream=False` for non-streaming requests
 - Set `is_stream=True` for streaming requests in `process_request_stream()`
 
-#### 4. Database Migration (`backend/migrations/`)
+#### 4. Log Repository (`backend/app/repositories/sqlalchemy/log_repo.py`)
+- Added `is_stream` field to `_to_domain()` method for reading logs
+- Added `is_stream` field to `create()` method for writing logs
+
+#### 5. Database Migration (`backend/migrations/`)
 - Created SQL migration script: `add_is_stream_column.sql`
 - Supports both SQLite and PostgreSQL
 - Created README with migration instructions
@@ -85,8 +89,9 @@ The new log list layout:
 ## Testing
 
 1. Frontend linting: ✅ Passed
-2. No TypeScript errors in modified files
+2. Frontend TypeScript compilation: ✅ Passed
 3. All changes follow existing code style and conventions
+4. Backend repository now correctly handles is_stream field
 
 ## Notes
 
@@ -94,3 +99,4 @@ The new log list layout:
 - The backend already tracked stream information in `response_body` JSON
 - This feature makes the stream status explicitly visible in the database and UI
 - Total token consumption calculation: `input_tokens + output_tokens`
+- **IMPORTANT**: For existing databases, you MUST run the migration script to add the `is_stream` column before restarting the backend service

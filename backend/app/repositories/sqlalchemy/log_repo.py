@@ -53,6 +53,7 @@ class SQLAlchemyLogRepository(LogRepository):
             error_info=entity.error_info,
             matched_provider_count=entity.matched_provider_count,
             trace_id=entity.trace_id,
+            is_stream=entity.is_stream,
         )
     
     async def create(self, data: RequestLogCreate) -> RequestLogModel:
@@ -77,6 +78,7 @@ class SQLAlchemyLogRepository(LogRepository):
             response_body=data.response_body,
             error_info=data.error_info,
             trace_id=data.trace_id,
+            is_stream=data.is_stream,
         )
         self.session.add(entity)
         await self.session.commit()
