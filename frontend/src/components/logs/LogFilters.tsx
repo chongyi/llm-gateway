@@ -5,7 +5,7 @@
 
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, RotateCcw } from 'lucide-react';
+import { Search, RotateCcw, ChevronDown, ChevronUp } from 'lucide-react';
 import { LogQueryParams, Provider } from '@/types';
 
 interface LogFiltersProps {
@@ -42,6 +42,8 @@ export function LogFilters({
   onSearch,
   onReset,
 }: LogFiltersProps) {
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
   // 更新单个筛选字段
   const updateFilter = <K extends keyof LogQueryParams>(
     key: K,
@@ -89,7 +91,7 @@ export function LogFilters({
       </div>
 
       {/* 第二行：供应商和状态 */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
         <div className="space-y-2">
           <Label>供应商</Label>
           <Select
@@ -112,27 +114,6 @@ export function LogFilters({
           </Select>
         </div>
         <div className="space-y-2">
-          <Label>状态码范围</Label>
-          <div className="flex gap-2">
-            <Input
-              type="number"
-              placeholder="最小"
-              value={filters.status_min || ''}
-              onChange={(e) =>
-                updateFilter('status_min', e.target.value ? Number(e.target.value) : undefined)
-              }
-            />
-            <Input
-              type="number"
-              placeholder="最大"
-              value={filters.status_max || ''}
-              onChange={(e) =>
-                updateFilter('status_max', e.target.value ? Number(e.target.value) : undefined)
-              }
-            />
-          </div>
-        </div>
-        <div className="space-y-2">
           <Label>是否有错误</Label>
           <Select
             value={filters.has_error === undefined ? 'all' : String(filters.has_error)}
@@ -150,83 +131,6 @@ export function LogFilters({
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-2">
-          <Label>重试次数</Label>
-          <div className="flex gap-2">
-            <Input
-              type="number"
-              placeholder="最小"
-              min={0}
-              value={filters.retry_count_min ?? ''}
-              onChange={(e) =>
-                updateFilter('retry_count_min', e.target.value ? Number(e.target.value) : undefined)
-              }
-            />
-            <Input
-              type="number"
-              placeholder="最大"
-              min={0}
-              value={filters.retry_count_max ?? ''}
-              onChange={(e) =>
-                updateFilter('retry_count_max', e.target.value ? Number(e.target.value) : undefined)
-              }
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* 第三行：API Key 和 Token */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        <div className="space-y-2">
-          <Label>API Key 名称</Label>
-          <Input
-            placeholder="模糊匹配"
-            value={filters.api_key_name || ''}
-            onChange={(e) => updateFilter('api_key_name', e.target.value)}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label>输入 Token 区间</Label>
-          <div className="flex gap-2">
-            <Input
-              type="number"
-              placeholder="最小"
-              value={filters.input_tokens_min ?? ''}
-              onChange={(e) =>
-                updateFilter('input_tokens_min', e.target.value ? Number(e.target.value) : undefined)
-              }
-            />
-            <Input
-              type="number"
-              placeholder="最大"
-              value={filters.input_tokens_max ?? ''}
-              onChange={(e) =>
-                updateFilter('input_tokens_max', e.target.value ? Number(e.target.value) : undefined)
-              }
-            />
-          </div>
-        </div>
-        <div className="space-y-2">
-          <Label>总耗时区间 (ms)</Label>
-          <div className="flex gap-2">
-            <Input
-              type="number"
-              placeholder="最小"
-              value={filters.total_time_min ?? ''}
-              onChange={(e) =>
-                updateFilter('total_time_min', e.target.value ? Number(e.target.value) : undefined)
-              }
-            />
-            <Input
-              type="number"
-              placeholder="最大"
-              value={filters.total_time_max ?? ''}
-              onChange={(e) =>
-                updateFilter('total_time_max', e.target.value ? Number(e.target.value) : undefined)
-              }
-            />
-          </div>
-        </div>
         <div className="flex items-end gap-2">
           <Button onClick={onSearch} className="flex-1">
             <Search className="mr-2 h-4 w-4" />
@@ -236,8 +140,124 @@ export function LogFilters({
             <RotateCcw className="mr-2 h-4 w-4" />
             重置
           </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowAdvanced(!showAdvanced)}
+            className="shrink-0"
+          >
+            {showAdvanced ? (
+              <ChevronUp className="h-4 w-4" />
+            ) : (
+              <ChevronDown className="h-4 w-4" />
+            )}
+          </Button>
         </div>
       </div>
+
+      {/* 高级筛选 */}
+      {showAdvanced && (
+        <div className="space-y-4 border-t pt-4">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            <div className="space-y-2">
+              <Label>状态码范围</Label>
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  placeholder="最小"
+                  value={filters.status_min || ''}
+                  onChange={(e) =>
+                    updateFilter('status_min', e.target.value ? Number(e.target.value) : undefined)
+                  }
+                />
+                <Input
+                  type="number"
+                  placeholder="最大"
+                  value={filters.status_max || ''}
+                  onChange={(e) =>
+                    updateFilter('status_max', e.target.value ? Number(e.target.value) : undefined)
+                  }
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>重试次数</Label>
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  placeholder="最小"
+                  min={0}
+                  value={filters.retry_count_min ?? ''}
+                  onChange={(e) =>
+                    updateFilter('retry_count_min', e.target.value ? Number(e.target.value) : undefined)
+                  }
+                />
+                <Input
+                  type="number"
+                  placeholder="最大"
+                  min={0}
+                  value={filters.retry_count_max ?? ''}
+                  onChange={(e) =>
+                    updateFilter('retry_count_max', e.target.value ? Number(e.target.value) : undefined)
+                  }
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>API Key 名称</Label>
+              <Input
+                placeholder="模糊匹配"
+                value={filters.api_key_name || ''}
+                onChange={(e) => updateFilter('api_key_name', e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>输入 Token 区间</Label>
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  placeholder="最小"
+                  value={filters.input_tokens_min ?? ''}
+                  onChange={(e) =>
+                    updateFilter('input_tokens_min', e.target.value ? Number(e.target.value) : undefined)
+                  }
+                />
+                <Input
+                  type="number"
+                  placeholder="最大"
+                  value={filters.input_tokens_max ?? ''}
+                  onChange={(e) =>
+                    updateFilter('input_tokens_max', e.target.value ? Number(e.target.value) : undefined)
+                  }
+                />
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            <div className="space-y-2">
+              <Label>总耗时区间 (ms)</Label>
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  placeholder="最小"
+                  value={filters.total_time_min ?? ''}
+                  onChange={(e) =>
+                    updateFilter('total_time_min', e.target.value ? Number(e.target.value) : undefined)
+                  }
+                />
+                <Input
+                  type="number"
+                  placeholder="最大"
+                  value={filters.total_time_max ?? ''}
+                  onChange={(e) =>
+                    updateFilter('total_time_max', e.target.value ? Number(e.target.value) : undefined)
+                  }
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
