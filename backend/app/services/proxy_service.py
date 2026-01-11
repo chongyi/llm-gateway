@@ -15,6 +15,11 @@ import anyio
 from app.common.errors import NotFoundError, ServiceError
 from app.common.sanitizer import sanitize_headers
 from app.common.stream_usage import StreamUsageAccumulator
+from app.common.protocol_conversion import (
+    convert_request_for_supplier,
+    convert_response_for_user,
+    convert_stream_for_user,
+)
 from app.common.token_counter import get_token_counter
 from app.common.utils import generate_trace_id
 from app.domain.log import RequestLogCreate
@@ -114,22 +119,12 @@ class ProxyService:
                 providers[pid] = provider
 
         eligible_provider_mappings = [
-            pm
-            for pm in provider_mappings
-            if (p := providers.get(pm.provider_id)) and p.protocol == request_protocol
+            pm for pm in provider_mappings if providers.get(pm.provider_id) is not None
         ]
-        eligible_providers = {
-            pid: p for pid, p in providers.items() if p.protocol == request_protocol
-        }
+        eligible_providers = {pid: p for pid, p in providers.items()}
 
         if not eligible_provider_mappings:
-            raise ServiceError(
-                message=(
-                    f"No providers configured for model '{requested_model}' "
-                    f"with protocol '{request_protocol}'"
-                ),
-                code="no_available_provider",
-            )
+            raise ServiceError(message="No available providers", code="no_available_provider")
 
         token_counter = get_token_counter(request_protocol)
         messages = body.get("messages", [])
@@ -218,22 +213,49 @@ class ProxyService:
         
         # 8. 执行请求（带重试）
         async def forward_fn(candidate: CandidateProvider) -> ProviderResponse:
-            client = get_provider_client(candidate.protocol)
-            return await client.forward(
-                base_url=candidate.base_url,
-                api_key=candidate.api_key,
-                path=path,
-                method=method,
-                headers=headers,
-                body=body,
-                target_model=candidate.target_model,
-            )
-        
+            try:
+                client = get_provider_client(candidate.protocol)
+                supplier_path, supplier_body = convert_request_for_supplier(
+                    request_protocol=request_protocol,
+                    supplier_protocol=candidate.protocol,
+                    path=path,
+                    body=body,
+                    target_model=candidate.target_model,
+                )
+                return await client.forward(
+                    base_url=candidate.base_url,
+                    api_key=candidate.api_key,
+                    path=supplier_path,
+                    method=method,
+                    headers=headers,
+                    body=supplier_body,
+                    target_model=candidate.target_model,
+                )
+            except Exception as e:
+                return ProviderResponse(status_code=400, error=str(e))
+
         result = await self.retry_handler.execute_with_retry(
             candidates=candidates,
             requested_model=requested_model,
             forward_fn=forward_fn,
         )
+
+        if result.response.body is not None and result.final_provider is not None:
+            try:
+                result.response.body = convert_response_for_user(
+                    request_protocol=request_protocol,
+                    supplier_protocol=result.final_provider.protocol,
+                    body=result.response.body,
+                    target_model=result.final_provider.target_model,
+                )
+            except Exception as e:
+                result.response = ProviderResponse(
+                    status_code=502,
+                    headers=result.response.headers,
+                    error=str(e),
+                    first_byte_delay_ms=result.response.first_byte_delay_ms,
+                    total_time_ms=result.response.total_time_ms,
+                )
         
         # 9. 计算输出 Token
         output_tokens = 0
@@ -350,16 +372,82 @@ class ProxyService:
             
         # 8. 执行流式请求
         def forward_stream_fn(candidate: CandidateProvider):
-            client = get_provider_client(candidate.protocol)
-            return client.forward_stream(
+            async def error_gen(msg: str):
+                yield b"", ProviderResponse(status_code=400, error=msg)
+
+            try:
+                client = get_provider_client(candidate.protocol)
+                supplier_path, supplier_body = convert_request_for_supplier(
+                    request_protocol=request_protocol,
+                    supplier_protocol=candidate.protocol,
+                    path=path,
+                    body=body,
+                    target_model=candidate.target_model,
+                )
+            except Exception as e:
+                return error_gen(str(e))
+
+            upstream_gen = client.forward_stream(
                 base_url=candidate.base_url,
                 api_key=candidate.api_key,
-                path=path,
+                path=supplier_path,
                 method=method,
                 headers=headers,
-                body=body,
+                body=supplier_body,
                 target_model=candidate.target_model,
             )
+
+            async def wrapped() -> AsyncGenerator[tuple[bytes, ProviderResponse], None]:
+                try:
+                    first_chunk, first_resp = await anext(upstream_gen)
+                except StopAsyncIteration:
+                    return
+
+                if not first_resp.is_success:
+                    yield first_chunk, first_resp
+                    async for chunk, resp in upstream_gen:
+                        yield chunk, resp
+                    return
+
+                async def upstream_bytes() -> AsyncGenerator[bytes, None]:
+                    yield first_chunk
+                    async for chunk, _ in upstream_gen:
+                        yield chunk
+
+                try:
+                    async for out_chunk in convert_stream_for_user(
+                        request_protocol=request_protocol,
+                        supplier_protocol=candidate.protocol,
+                        upstream=upstream_bytes(),
+                        model=candidate.target_model,
+                    ):
+                        yield out_chunk, first_resp
+                except Exception as e:
+                    err = str(e)
+                    if (request_protocol or "openai").lower() == "anthropic":
+                        yield (
+                            f"data: {json.dumps({'type': 'error', 'error': {'message': err}}, ensure_ascii=False)}\n\n".encode(
+                                "utf-8"
+                            ),
+                            first_resp,
+                        )
+                        yield (
+                            f"data: {json.dumps({'type': 'message_stop'}, ensure_ascii=False)}\n\n".encode(
+                                "utf-8"
+                            ),
+                            first_resp,
+                        )
+                    else:
+                        yield (
+                            f"data: {json.dumps({'error': {'message': err}}, ensure_ascii=False)}\n\n".encode(
+                                "utf-8"
+                            ),
+                            first_resp,
+                        )
+                        yield (b"data: [DONE]\n\n", first_resp)
+                    return
+
+            return wrapped()
             
         stream_gen = self.retry_handler.execute_with_retry_stream(
             candidates, requested_model, forward_stream_fn
