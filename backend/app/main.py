@@ -15,6 +15,7 @@ from app.db.session import init_db
 from app.common.errors import AppError
 from app.api.proxy import openai_router, anthropic_router
 from app.api.admin import providers_router, models_router, api_keys_router, logs_router
+from app.scheduler import start_scheduler, shutdown_scheduler
 
 
 # 应用生命周期管理
@@ -22,13 +23,15 @@ from app.api.admin import providers_router, models_router, api_keys_router, logs
 async def lifespan(app: FastAPI):
     """
     应用生命周期管理
-    
+
     启动时初始化数据库，关闭时清理资源。
     """
     # 启动时
     await init_db()
+    start_scheduler()
     yield
-    # 关闭时（可添加清理逻辑）
+    # 关闭时
+    shutdown_scheduler()
 
 
 # 创建 FastAPI 应用

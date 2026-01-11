@@ -4,9 +4,10 @@
 提供请求日志的具体数据库操作实现。
 """
 
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from sqlalchemy import func, select, and_, or_
+from sqlalchemy import func, select, and_, or_, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import RequestLog as RequestLogORM
@@ -197,5 +198,21 @@ class SQLAlchemyLogRepository(LogRepository):
         # 执行查询
         result = await self.session.execute(stmt)
         entities = result.scalars().all()
-        
+
         return [self._to_domain(e) for e in entities], total
+
+    async def delete_older_than_days(self, days: int) -> int:
+        """
+        删除指定天数之前的日志
+
+        Args:
+            days: 保留天数，删除 days 天之前的日志
+
+        Returns:
+            int: 删除的日志数量
+        """
+        cutoff_time = datetime.now(timezone.utc) - timedelta(days=days)
+        stmt = delete(RequestLogORM).where(RequestLogORM.request_time < cutoff_time)
+        result = await self.session.execute(stmt)
+        await self.session.commit()
+        return result.rowcount

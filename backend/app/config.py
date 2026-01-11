@@ -43,7 +43,13 @@ class Settings(BaseSettings):
     API_KEY_PREFIX: str = "lgw-"
     # API Key 长度（不含前缀）
     API_KEY_LENGTH: int = 32
-    
+
+    # 日志清理配置
+    # 日志保留天数（默认 7 天）
+    LOG_RETENTION_DAYS: int = 7
+    # 日志清理执行时间（小时，0-23，默认 4 点即凌晨）
+    LOG_CLEANUP_HOUR: int = 4
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

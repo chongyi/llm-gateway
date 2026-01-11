@@ -4,6 +4,7 @@
 提供请求日志的业务逻辑处理。
 """
 
+import logging
 from typing import Optional
 
 from app.common.errors import NotFoundError
@@ -14,6 +15,8 @@ from app.domain.log import (
     RequestLogQuery,
 )
 from app.repositories.log_repo import LogRepository
+
+logger = logging.getLogger(__name__)
 
 
 class LogService:
@@ -101,5 +104,25 @@ class LogService:
             )
             for log in logs
         ]
-        
+
         return responses, total
+
+    async def cleanup_old_logs(self, retention_days: int) -> int:
+        """
+        清理指定天数之前的旧日志
+
+        Args:
+            retention_days: 保留天数
+
+        Returns:
+            int: 删除的日志数量
+        """
+        try:
+            deleted_count = await self.repo.delete_older_than_days(retention_days)
+            logger.info(
+                f"Log cleanup completed: {deleted_count} logs older than {retention_days} days deleted"
+            )
+            return deleted_count
+        except Exception as e:
+            logger.error(f"Failed to cleanup old logs: {str(e)}", exc_info=True)
+            raise

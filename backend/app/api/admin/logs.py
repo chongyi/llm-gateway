@@ -7,13 +7,14 @@
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app.api.deps import LogServiceDep
 from app.common.errors import AppError
 from app.common.utils import try_parse_json_object
+from app.config import get_settings
 from app.domain.log import (
     RequestLogQuery,
     RequestLogResponse,
@@ -29,6 +30,12 @@ class PaginatedLogResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+class CleanupResponse(BaseModel):
+    """日志清理响应"""
+    deleted_count: int
+    message: str
 
 
 @router.get("", response_model=PaginatedLogResponse)
@@ -112,6 +119,29 @@ async def get_log(
             response_body=try_parse_json_object(log.response_body)
             if log.response_body
             else None,
+        )
+    except AppError as e:
+        return JSONResponse(content=e.to_dict(), status_code=e.status_code)
+
+
+@router.post("/cleanup", response_model=CleanupResponse)
+async def cleanup_logs(
+    service: LogServiceDep,
+    days: Optional[int] = Query(None, ge=1, description="保留天数（默认使用配置值）"),
+):
+    """
+    手动触发日志清理
+
+    删除指定天数之前的日志。如果不指定天数，则使用配置的默认保留天数。
+    """
+    try:
+        settings = get_settings()
+        retention_days = days if days is not None else settings.LOG_RETENTION_DAYS
+
+        deleted_count = await service.cleanup_old_logs(retention_days)
+        return CleanupResponse(
+            deleted_count=deleted_count,
+            message=f"Successfully deleted {deleted_count} logs older than {retention_days} days",
         )
     except AppError as e:
         return JSONResponse(content=e.to_dict(), status_code=e.status_code)

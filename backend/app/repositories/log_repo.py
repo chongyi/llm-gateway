@@ -47,13 +47,26 @@ class LogRepository(ABC):
     async def query(self, query: RequestLogQuery) -> tuple[list[RequestLogModel], int]:
         """
         查询日志列表
-        
+
         支持多条件过滤、分页和排序。
-        
+
         Args:
             query: 查询条件
-        
+
         Returns:
             tuple[list[RequestLogModel], int]: (日志列表, 总数)
+        """
+        pass
+
+    @abstractmethod
+    async def delete_older_than_days(self, days: int) -> int:
+        """
+        删除指定天数之前的日志
+
+        Args:
+            days: 保留天数，删除 days 天之前的日志
+
+        Returns:
+            int: 删除的日志数量
         """
         pass
