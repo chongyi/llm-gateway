@@ -97,6 +97,7 @@ class LogService:
                 output_tokens=log.output_tokens,
                 response_status=log.response_status,
                 trace_id=log.trace_id,
+                is_stream=log.is_stream,
             )
             for log in logs
         ]
