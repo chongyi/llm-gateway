@@ -130,7 +130,7 @@ export function LogFilters({
         normalized[key] = undefined;
         continue;
       }
-      (normalized as any)[key] = value;
+      (normalized as Record<keyof LogQueryParams, unknown>)[key] = value;
     }
 
     onFilterChange(normalized);

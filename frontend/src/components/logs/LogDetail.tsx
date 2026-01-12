@@ -5,193 +5,265 @@
 
 'use client';
 
-import React, { useState } from 'react';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from '@/components/ui/dialog';
-import { Badge } from '@/components/ui/badge';
+import React, { useMemo, useState } from 'react';
+import { Badge, type BadgeProps } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Clock, Server, AlertCircle, Shield, Play } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  AlertCircle,
+  Check,
+  Clock,
+  Copy,
+  Play,
+  Server,
+  Shield,
+  Waves,
+} from 'lucide-react';
 import { RequestLogDetail } from '@/types';
-import { formatDateTime, getStatusColor, formatDuration } from '@/lib/utils';
+import { copyToClipboard, formatDateTime, formatDuration } from '@/lib/utils';
 import { JsonViewer } from '@/components/common/JsonViewer';
 
 interface LogDetailProps {
   /** Log data */
   log: RequestLogDetail | null;
-  /** Whether detailed view is open */
-  open: boolean;
-  /** Close callback */
-  onOpenChange: (open: boolean) => void;
 }
 
 /**
  * Log Detail Component
  */
-export function LogDetail({ log, open, onOpenChange }: LogDetailProps) {
+export function LogDetail({ log }: LogDetailProps) {
   const [activeTab, setActiveTab] = useState<'request' | 'response' | 'headers'>('request');
+  const [traceCopied, setTraceCopied] = useState(false);
+
+  const responseStatus = log?.response_status;
+  const statusVariant = useMemo<BadgeProps['variant']>(() => {
+    const status = responseStatus;
+    if (status === null || status === undefined) return 'outline';
+    if (status >= 200 && status < 300) return 'success';
+    if (status >= 400 && status < 500) return 'warning';
+    if (status >= 500) return 'error';
+    return 'outline';
+  }, [responseStatus]);
+
+  const modelMapping = useMemo(() => {
+    const requestedModel = log?.requested_model;
+    const targetModel = log?.target_model;
+    if (!requestedModel && !targetModel) return '-';
+    if (requestedModel === targetModel) return requestedModel || '-';
+    return `${requestedModel || '-'} → ${targetModel || '-'}`;
+  }, [log?.requested_model, log?.target_model]);
+
+  const handleCopyTraceId = async () => {
+    const traceId = log?.trace_id;
+    if (!traceId) return;
+    const ok = await copyToClipboard(traceId);
+    if (!ok) return;
+    setTraceCopied(true);
+    setTimeout(() => setTraceCopied(false), 1500);
+  };
+
+  const tabButtonClass = (tab: typeof activeTab) => (
+    `inline-flex items-center rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+      activeTab === tab
+        ? 'bg-background text-foreground shadow-sm'
+        : 'text-muted-foreground hover:text-foreground'
+    }`
+  );
 
   if (!log) return null;
 
-  const statusColor = getStatusColor(log.response_status);
-
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto p-0 gap-0">
-        <div className="flex h-full flex-col">
-          {/* Header */}
-          <div className="border-b p-6">
-            <DialogHeader>
-              <div className="flex items-start justify-between">
-                <div>
-                  <DialogTitle className="text-xl font-bold">Request Log Details</DialogTitle>
-                  <DialogDescription className="mt-1 flex items-center gap-2">
-                    <span className="font-mono">{log.trace_id}</span>
-                  </DialogDescription>
+    <div className="grid gap-6 lg:grid-cols-3">
+      <div className="space-y-6 lg:col-span-1">
+        <Card>
+          <CardHeader className="space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <CardTitle className="text-base">Overview</CardTitle>
+                <div className="mt-1 text-sm text-muted-foreground">
+                  Request log summary and routing info
                 </div>
-                <Badge className={statusColor}>
-                  {log.response_status || 'Unknown'}
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                {log.is_stream && (
+                  <span title="Stream Request">
+                    <Waves className="h-4 w-4 text-blue-500" />
+                  </span>
+                )}
+                <Badge variant={statusVariant}>
+                  {log.response_status ?? 'Unknown'}
                 </Badge>
               </div>
-            </DialogHeader>
+            </div>
 
-            {/* Basic Info */}
-            <div className="mt-6 grid grid-cols-2 gap-4 text-sm">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Clock className="h-4 w-4" />
-                <span>Request Time:</span>
-                <span className="font-medium text-foreground">
-                  {formatDateTime(log.request_time)}
-                </span>
+            <div className="flex items-center justify-between gap-2 rounded-lg border bg-muted/30 px-3 py-2">
+              <div className="min-w-0">
+                <div className="text-xs text-muted-foreground">Trace ID</div>
+                <div className="truncate font-mono text-sm" title={log.trace_id}>
+                  {log.trace_id || '-'}
+                </div>
               </div>
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Server className="h-4 w-4" />
-                <span>Provider:</span>
-                <span className="font-medium text-foreground">
-                  {log.provider_name}
-                </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1 px-2"
+                onClick={handleCopyTraceId}
+                disabled={!log.trace_id}
+              >
+                {traceCopied ? (
+                  <>
+                    <Check className="h-3.5 w-3.5 text-green-600" />
+                    <span className="text-green-600">Copied</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-3.5 w-3.5" />
+                    <span>Copy</span>
+                  </>
+                )}
+              </Button>
+            </div>
+          </CardHeader>
+
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+              <div className="flex items-start gap-2">
+                <Clock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                <div className="min-w-0">
+                  <div className="text-muted-foreground">Request Time</div>
+                  <div className="truncate font-medium" title={log.request_time}>
+                    {formatDateTime(log.request_time)}
+                  </div>
+                </div>
               </div>
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Shield className="h-4 w-4" />
-                <span>API Key:</span>
-                <span className="font-medium text-foreground">
-                  {log.api_key_name} ({log.api_key_id})
-                </span>
+              <div className="flex items-start gap-2">
+                <Server className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                <div className="min-w-0">
+                  <div className="text-muted-foreground">Provider</div>
+                  <div className="truncate font-medium" title={log.provider_name}>
+                    {log.provider_name || '-'}
+                  </div>
+                </div>
               </div>
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Play className="h-4 w-4" />
-                <span>Model:</span>
-                <span className="font-medium text-foreground">
-                  {log.requested_model} → {log.target_model}
-                </span>
+              <div className="flex items-start gap-2">
+                <Shield className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                <div className="min-w-0">
+                  <div className="text-muted-foreground">API Key</div>
+                  <div className="truncate font-medium" title={log.api_key_name}>
+                    {log.api_key_name || '-'}
+                    {log.api_key_id ? (
+                      <span className="text-muted-foreground"> ({log.api_key_id})</span>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-start gap-2">
+                <Play className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                <div className="min-w-0">
+                  <div className="text-muted-foreground">Model Mapping</div>
+                  <div className="truncate font-medium" title={modelMapping}>
+                    {modelMapping}
+                  </div>
+                </div>
               </div>
             </div>
 
-            {/* Metrics */}
-            <div className="mt-4 flex gap-4 rounded-lg bg-muted/50 p-3 text-sm flex-wrap">
-              <div>
-                <span className="text-muted-foreground">Latency:</span>
-                <span className="ml-1 font-medium">{log.first_byte_delay_ms}ms</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Total Time:</span>
-                <span className="ml-1 font-medium">
-                  {formatDuration(log.total_time_ms || 0)}
-                </span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Input Token:</span>
-                <span className="ml-1 font-medium">{log.input_tokens}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Output Token:</span>
-                <span className="ml-1 font-medium">{log.output_tokens}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Retries:</span>
-                <span className="ml-1 font-medium">{log.retry_count}</span>
+            <div className="rounded-lg border bg-muted/30 p-3">
+              <div className="mb-2 text-sm font-medium">Metrics</div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">TTFB</span>
+                  <span className="font-medium">
+                    {log.first_byte_delay_ms ? `${log.first_byte_delay_ms}ms` : '-'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Total</span>
+                  <span className="font-medium">{formatDuration(log.total_time_ms || 0)}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Input</span>
+                  <span className="font-medium">{log.input_tokens ?? 0}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Output</span>
+                  <span className="font-medium">{log.output_tokens ?? 0}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Retries</span>
+                  <span className="font-medium">{log.retry_count ?? 0}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Tokens</span>
+                  <span className="font-medium">{(log.input_tokens ?? 0) + (log.output_tokens ?? 0)}</span>
+                </div>
               </div>
             </div>
+          </CardContent>
+        </Card>
 
-            {/* Error Info */}
-            {log.error_info && (
-              <div className="mt-4 flex items-start gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-600">
-                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                <div className="break-all">{log.error_info}</div>
+        {log.error_info && (
+          <Card className="border-red-200 bg-red-50/50">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base text-red-700">
+                <AlertCircle className="h-4 w-4" />
+                Error
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="break-words font-mono text-sm text-red-700">
+                {log.error_info}
               </div>
-            )}
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      <Card className="lg:col-span-2">
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          <div>
+            <CardTitle className="text-base">Payload</CardTitle>
+            <div className="mt-1 text-sm text-muted-foreground">
+              Inspect request/response JSON and headers
+            </div>
           </div>
 
-          {/* Content Area */}
-          <div className="flex-1 p-6">
-            <div className="w-full">
-              <div className="flex border-b mb-4">
-                <button
-                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                    activeTab === 'request'
-                      ? 'border-primary text-primary'
-                      : 'border-transparent text-muted-foreground hover:text-foreground'
-                  }`}
-                  onClick={() => setActiveTab('request')}
-                >
-                  Request Content
-                </button>
-                <button
-                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                    activeTab === 'response'
-                      ? 'border-primary text-primary'
-                      : 'border-transparent text-muted-foreground hover:text-foreground'
-                  }`}
-                  onClick={() => setActiveTab('response')}
-                >
-                  Response Content
-                </button>
-                <button
-                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                    activeTab === 'headers'
-                      ? 'border-primary text-primary'
-                      : 'border-transparent text-muted-foreground hover:text-foreground'
-                  }`}
-                  onClick={() => setActiveTab('headers')}
-                >
-                  Headers Info
-                </button>
-              </div>
-              
-              {activeTab === 'request' && (
-                <div className="mt-4 space-y-4">
-                  <div>
-                    <h4 className="mb-2 text-sm font-medium">Request Body</h4>
-                    <JsonViewer data={log.request_body} />
-                  </div>
-                </div>
-              )}
-              
-              {activeTab === 'response' && (
-                <div className="mt-4 space-y-4">
-                  <div>
-                    <h4 className="mb-2 text-sm font-medium">Response Body</h4>
-                    <JsonViewer data={log.response_body || {}} />
-                  </div>
-                </div>
-              )}
-              
-              {activeTab === 'headers' && (
-                <div className="mt-4 space-y-4">
-                  <div>
-                    <h4 className="mb-2 text-sm font-medium">Request Headers</h4>
-                    <JsonViewer data={log.request_headers} />
-                  </div>
-                </div>
-              )}
-            </div>
+          <div className="inline-flex w-full rounded-lg border bg-muted/30 p-1 sm:w-auto">
+            <button className={tabButtonClass('request')} onClick={() => setActiveTab('request')}>
+              Request
+            </button>
+            <button className={tabButtonClass('response')} onClick={() => setActiveTab('response')}>
+              Response
+            </button>
+            <button className={tabButtonClass('headers')} onClick={() => setActiveTab('headers')}>
+              Headers
+            </button>
           </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+        </CardHeader>
+
+        <CardContent>
+          {activeTab === 'request' && (
+            <div className="space-y-3">
+              <div className="text-sm font-medium">Request Body</div>
+              <JsonViewer data={log.request_body} maxHeight="70vh" />
+            </div>
+          )}
+
+          {activeTab === 'response' && (
+            <div className="space-y-3">
+              <div className="text-sm font-medium">Response Body</div>
+              <JsonViewer data={log.response_body || {}} maxHeight="70vh" />
+            </div>
+          )}
+
+          {activeTab === 'headers' && (
+            <div className="space-y-3">
+              <div className="text-sm font-medium">Request Headers</div>
+              <JsonViewer data={log.request_headers} maxHeight="70vh" />
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
