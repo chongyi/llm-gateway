@@ -1,7 +1,7 @@
 """
-协议转换（OpenAI <-> Anthropic）
+Protocol Conversion (OpenAI <-> Anthropic)
 
-在供应商协议与用户请求协议不一致时，将请求/响应在两种协议之间转换。
+Convert request/response between two protocols when provider protocol differs from user request protocol.
 """
 
 from __future__ import annotations
@@ -23,25 +23,25 @@ try:
 
     try:
         from litellm.llms.anthropic.chat.transformation import AnthropicConfig  # type: ignore
-    except Exception:  # pragma: no cover
+    except Exception:
         AnthropicConfig = litellm.AnthropicConfig  # type: ignore[misc,assignment]
 
     try:
         from litellm.types.utils import ModelResponse  # type: ignore
-    except Exception:  # pragma: no cover
+    except Exception:
         from litellm.utils import ModelResponse  # type: ignore
 
     # NOTE: This module path is not available in all LiteLLM versions.
-    try:  # pragma: no cover
+    try:
         from litellm.llms.anthropic.experimental_pass_through.transformation import (  # type: ignore
             AnthropicExperimentalPassThroughConfig,
         )
 
         _HAS_EXPERIMENTAL_PASSTHROUGH = True
-    except Exception:  # pragma: no cover
+    except Exception:
         AnthropicExperimentalPassThroughConfig = None  # type: ignore[assignment]
         _HAS_EXPERIMENTAL_PASSTHROUGH = False
-except Exception as e:  # pragma: no cover
+except Exception as e:
     raise RuntimeError(
         "litellm is required for protocol conversion. "
         "Install backend dependencies (see backend/requirements.txt)."
@@ -223,9 +223,9 @@ def convert_request_for_supplier(
     target_model: str,
 ) -> tuple[str, dict[str, Any]]:
     """
-    将用户请求协议转换为供应商协议的请求体/路径。
+    Convert user request protocol to supplier protocol request body/path.
 
-    仅支持 Chat/Messages 的互转：
+    Only supports Chat/Messages conversion:
     - OpenAI: /v1/chat/completions
     - Anthropic: /v1/messages
     """
@@ -301,7 +301,7 @@ def convert_response_for_user(
     target_model: str,
 ) -> Any:
     """
-    将供应商响应转换为用户请求协议的响应体。
+    Convert supplier response to user request protocol response body.
     """
     request_protocol = normalize_protocol(request_protocol)
     supplier_protocol = normalize_protocol(supplier_protocol)
@@ -354,7 +354,7 @@ async def convert_stream_for_user(
     model: str,
 ) -> AsyncGenerator[bytes, None]:
     """
-    将供应商 SSE bytes 流转换为用户请求协议的 SSE bytes 流。
+    Convert supplier SSE bytes stream to user request protocol SSE bytes stream.
 
     - OpenAI: data: {chat.completion.chunk}\n\n + data: [DONE]\n\n
     - Anthropic: data: {type: ...}\n\n

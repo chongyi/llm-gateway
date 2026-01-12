@@ -1,10 +1,10 @@
 """
-管理后台登录鉴权
+Admin Authentication
 
-当设置了 ADMIN_USERNAME 与 ADMIN_PASSWORD 时，后台管理接口需要携带管理员令牌：
+When ADMIN_USERNAME and ADMIN_PASSWORD are set, admin API endpoints require an admin token:
 Authorization: Bearer <token>
 
-令牌为无状态签名 token，不依赖外部存储。
+The token is a stateless signed token and does not depend on external storage.
 """
 
 from __future__ import annotations
@@ -78,11 +78,11 @@ def verify_admin_token(
     now: int | None = None,
 ) -> dict[str, Any] | None:
     """
-    校验并解析管理员 token。
+    Verify and parse admin token.
 
     Returns:
-        dict: payload（校验通过）
-        None: 校验失败
+        dict: payload (Verification passed)
+        None: Verification failed
     """
     try:
         payload_b64, signature_b64 = token.split(".", 1)
@@ -117,4 +117,3 @@ def verify_admin_token(
         return None
 
     return payload
-
