@@ -199,7 +199,7 @@ class ProxyService:
             body=body,
         )
 
-        # DEBUG: Print matched providers
+        # DEBUG: Log matched providers
         candidates_info = [
             {
                 "id": c.provider_id,
@@ -209,7 +209,7 @@ class ProxyService:
             }
             for c in candidates
         ]
-        print(f"[DEBUG] Matched Providers: {json.dumps(candidates_info, ensure_ascii=False)}")
+        logger.debug(f"Matched Providers: {json.dumps(candidates_info, ensure_ascii=False)}")
         
         # 8. 执行请求（带重试）
         async def forward_fn(candidate: CandidateProvider) -> ProviderResponse:
@@ -245,11 +245,6 @@ class ProxyService:
                     candidate.protocol,
                     error_msg,
                 )
-                print(
-                    f"[ERROR] Request Forwarding Error: provider_id={candidate.provider_id}, "
-                    f"provider_name={candidate.provider_name}, request_protocol={request_protocol}, "
-                    f"supplier_protocol={candidate.protocol}, error={error_msg}"
-                )
                 return ProviderResponse(status_code=400, error=error_msg)
 
         result = await self.retry_handler.execute_with_retry(
@@ -278,11 +273,6 @@ class ProxyService:
                     request_protocol,
                     result.final_provider.protocol,
                     error_msg,
-                )
-                print(
-                    f"[ERROR] Response Conversion Error: provider_id={result.final_provider.provider_id}, "
-                    f"provider_name={result.final_provider.provider_name}, request_protocol={request_protocol}, "
-                    f"supplier_protocol={result.final_provider.protocol}, error={error_msg}"
                 )
                 result.response = ProviderResponse(
                     status_code=502,
@@ -341,12 +331,12 @@ class ProxyService:
             is_stream=False,
         )
         
-        # DEBUG: Print log as JSON
+        # DEBUG: Log request details
         try:
-            print(f"[DEBUG] Request Log: {log_data.model_dump_json()}")
+            logger.debug(f"Request Log: {log_data.model_dump_json()}")
         except AttributeError:
             # Fallback for Pydantic v1
-            print(f"[DEBUG] Request Log: {log_data.json()}")
+            logger.debug(f"Request Log: {log_data.json()}")
 
         await self.log_repo.create(log_data)
         
@@ -397,7 +387,7 @@ class ProxyService:
             body=body,
         )
 
-        # DEBUG: Print matched providers
+        # DEBUG: Log matched providers
         candidates_info = [
             {
                 "id": c.provider_id,
@@ -407,7 +397,7 @@ class ProxyService:
             }
             for c in candidates
         ]
-        print(f"[DEBUG] Matched Providers: {json.dumps(candidates_info, ensure_ascii=False)}")
+        logger.debug(f"Matched Providers: {json.dumps(candidates_info, ensure_ascii=False)}")
             
         # 8. 执行流式请求
         def forward_stream_fn(candidate: CandidateProvider):
@@ -433,11 +423,6 @@ class ProxyService:
                     request_protocol,
                     candidate.protocol,
                     error_msg,
-                )
-                print(
-                    f"[ERROR] Stream Request Conversion Error: provider_id={candidate.provider_id}, "
-                    f"provider_name={candidate.provider_name}, request_protocol={request_protocol}, "
-                    f"supplier_protocol={candidate.protocol}, error={error_msg}"
                 )
                 return error_gen(error_msg)
 
@@ -492,11 +477,6 @@ class ProxyService:
                         request_protocol,
                         candidate.protocol,
                         err,
-                    )
-                    print(
-                        f"[ERROR] Stream Response Conversion Error: provider_id={candidate.provider_id}, "
-                        f"provider_name={candidate.provider_name}, request_protocol={request_protocol}, "
-                        f"supplier_protocol={candidate.protocol}, error={err}"
                     )
                     if (request_protocol or "openai").lower() == "anthropic":
                         yield (
@@ -596,12 +576,12 @@ class ProxyService:
                     is_stream=True,
                 )
                 
-                # DEBUG: Print log as JSON
+                # DEBUG: Log request details
                 try:
-                    print(f"[DEBUG] Request Log: {log_data.model_dump_json()}")
+                    logger.debug(f"Request Log: {log_data.model_dump_json()}")
                 except AttributeError:
                     # Fallback for Pydantic v1
-                    print(f"[DEBUG] Request Log: {log_data.json()}")
+                    logger.debug(f"Request Log: {log_data.json()}")
 
                 # client disconnect 会触发取消，使用 shield 确保日志仍能写入 DB
                 try:

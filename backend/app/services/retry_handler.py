@@ -130,12 +130,6 @@ class RetryHandler:
                     same_provider_retries + 1,
                     self.max_retries,
                 )
-                print(
-                    f"[ERROR] Provider Failed: provider_id={current_provider.provider_id}, "
-                    f"provider_name={current_provider.provider_name}, protocol={current_provider.protocol}, "
-                    f"status_code={response.status_code}, error={response.error}, "
-                    f"retry_attempt={same_provider_retries + 1}/{self.max_retries}"
-                )
 
                 # 状态码 >= 500：同供应商重试
                 if response.is_server_error:
@@ -153,10 +147,6 @@ class RetryHandler:
                             current_provider.provider_id,
                             current_provider.provider_name,
                         )
-                        print(
-                            f"[ERROR] Max retries reached for provider_id={current_provider.provider_id}, "
-                            f"provider_name={current_provider.provider_name}, switching to next provider"
-                        )
                         break
                 else:
                     # 状态码 < 500：直接切换供应商
@@ -165,10 +155,6 @@ class RetryHandler:
                         current_provider.provider_id,
                         current_provider.provider_name,
                         response.status_code,
-                    )
-                    print(
-                        f"[ERROR] Client error from provider_id={current_provider.provider_id}, "
-                        f"provider_name={current_provider.provider_name}, status_code={response.status_code}, switching to next provider"
                     )
                     total_retry_count += 1
                     break
@@ -260,12 +246,6 @@ class RetryHandler:
                         same_provider_retries + 1,
                         self.max_retries,
                     )
-                    print(
-                        f"[ERROR] Provider Stream Failed: provider_id={current_provider.provider_id}, "
-                        f"provider_name={current_provider.provider_name}, protocol={current_provider.protocol}, "
-                        f"status_code={response.status_code}, error={response.error}, "
-                        f"retry_attempt={same_provider_retries + 1}/{self.max_retries}"
-                    )
 
                     # 失败逻辑
                     if response.is_server_error:
@@ -280,10 +260,6 @@ class RetryHandler:
                                 current_provider.provider_id,
                                 current_provider.provider_name,
                             )
-                            print(
-                                f"[ERROR] Max stream retries reached for provider_id={current_provider.provider_id}, "
-                                f"provider_name={current_provider.provider_name}, switching to next provider"
-                            )
                             break
                     else:
                         logger.warning(
@@ -291,10 +267,6 @@ class RetryHandler:
                             current_provider.provider_id,
                             current_provider.provider_name,
                             response.status_code,
-                        )
-                        print(
-                            f"[ERROR] Client error from stream provider_id={current_provider.provider_id}, "
-                            f"provider_name={current_provider.provider_name}, status_code={response.status_code}, switching to next provider"
                         )
                         total_retry_count += 1
                         break
@@ -311,11 +283,6 @@ class RetryHandler:
                         same_provider_retries + 1,
                         self.max_retries,
                     )
-                    print(
-                        f"[ERROR] Stream Exception: provider_id={current_provider.provider_id}, "
-                        f"provider_name={current_provider.provider_name}, protocol={current_provider.protocol}, "
-                        f"exception={str(e)}, retry_attempt={same_provider_retries + 1}/{self.max_retries}"
-                    )
                     same_provider_retries += 1
                     total_retry_count += 1
                     if same_provider_retries < self.max_retries:
@@ -326,10 +293,6 @@ class RetryHandler:
                             "Max exception retries reached for stream provider: provider_id=%s, provider_name=%s, switching to next provider",
                             current_provider.provider_id,
                             current_provider.provider_name,
-                        )
-                        print(
-                            f"[ERROR] Max exception retries reached for stream provider_id={current_provider.provider_id}, "
-                            f"provider_name={current_provider.provider_name}, switching to next provider"
                         )
                         break
             
