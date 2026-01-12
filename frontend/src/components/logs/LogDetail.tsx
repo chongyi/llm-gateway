@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   AlertCircle,
+  ArrowRight,
   Check,
   Clock,
   Copy,
@@ -73,153 +74,176 @@ export function LogDetail({ log }: LogDetailProps) {
   if (!log) return null;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-3">
-      <div className="space-y-6 lg:col-span-1">
-        <Card>
-          <CardHeader className="space-y-3">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <CardTitle className="text-base">Overview</CardTitle>
-                <div className="mt-1 text-sm text-muted-foreground">
-                  Request log summary and routing info
-                </div>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                {log.is_stream && (
-                  <span title="Stream Request">
-                    <Waves className="h-4 w-4 text-blue-500" />
-                  </span>
-                )}
-                <Badge variant={statusVariant}>
-                  {log.response_status ?? 'Unknown'}
-                </Badge>
+    <div className="space-y-6">
+      <Card>
+        <CardHeader className="space-y-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <CardTitle className="text-base">Overview</CardTitle>
+              <div className="mt-1 text-sm text-muted-foreground">
+                Basic info, routing summary, and metrics
               </div>
             </div>
+            <div className="flex shrink-0 items-center gap-2 sm:justify-end">
+              {log.is_stream && (
+                <span title="Stream Request">
+                  <Waves className="h-4 w-4 text-blue-500" />
+                </span>
+              )}
+              <Badge variant={statusVariant}>
+                {log.response_status ?? 'Unknown'}
+              </Badge>
+            </div>
+          </div>
 
-            <div className="flex items-center justify-between gap-2 rounded-lg border bg-muted/30 px-3 py-2">
+          <div className="flex items-center justify-between gap-2 rounded-lg border bg-muted/30 px-3 py-2">
+            <div className="min-w-0">
+              <div className="text-xs text-muted-foreground">Trace ID</div>
+              <div className="truncate font-mono text-sm" title={log.trace_id}>
+                {log.trace_id || '-'}
+              </div>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 gap-1 px-2"
+              onClick={handleCopyTraceId}
+              disabled={!log.trace_id}
+            >
+              {traceCopied ? (
+                <>
+                  <Check className="h-3.5 w-3.5 text-green-600" />
+                  <span className="text-green-600">Copied</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="h-3.5 w-3.5" />
+                  <span>Copy</span>
+                </>
+              )}
+            </Button>
+          </div>
+        </CardHeader>
+
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+            <div className="flex items-start gap-2">
+              <Clock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
               <div className="min-w-0">
-                <div className="text-xs text-muted-foreground">Trace ID</div>
-                <div className="truncate font-mono text-sm" title={log.trace_id}>
-                  {log.trace_id || '-'}
+                <div className="text-muted-foreground">Request Time</div>
+                <div className="truncate font-medium" title={log.request_time}>
+                  {formatDateTime(log.request_time)}
                 </div>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 gap-1 px-2"
-                onClick={handleCopyTraceId}
-                disabled={!log.trace_id}
-              >
-                {traceCopied ? (
-                  <>
-                    <Check className="h-3.5 w-3.5 text-green-600" />
-                    <span className="text-green-600">Copied</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="h-3.5 w-3.5" />
-                    <span>Copy</span>
-                  </>
-                )}
-              </Button>
             </div>
+            <div className="flex items-start gap-2">
+              <Server className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+              <div className="min-w-0">
+                <div className="text-muted-foreground">Provider</div>
+                <div className="truncate font-medium" title={log.provider_name}>
+                  {log.provider_name || '-'}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <Shield className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+              <div className="min-w-0">
+                <div className="text-muted-foreground">API Key</div>
+                <div className="truncate font-medium" title={log.api_key_name}>
+                  {log.api_key_name || '-'}
+                  {log.api_key_id ? (
+                    <span className="text-muted-foreground"> ({log.api_key_id})</span>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <Play className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+              <div className="min-w-0">
+                <div className="text-muted-foreground">Model Mapping</div>
+                <div className="truncate font-medium" title={modelMapping}>
+                  {modelMapping}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-lg border bg-muted/30 p-3">
+            <div className="mb-2 text-sm font-medium">Metrics</div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3 lg:grid-cols-6">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-muted-foreground">TTFB</span>
+                <span className="font-medium">
+                  {log.first_byte_delay_ms ? `${log.first_byte_delay_ms}ms` : '-'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-muted-foreground">Total</span>
+                <span className="font-medium">{formatDuration(log.total_time_ms || 0)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-muted-foreground">Input</span>
+                <span className="font-medium">{log.input_tokens ?? 0}</span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-muted-foreground">Output</span>
+                <span className="font-medium">{log.output_tokens ?? 0}</span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-muted-foreground">Retries</span>
+                <span className="font-medium">{log.retry_count ?? 0}</span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-muted-foreground">Tokens</span>
+                <span className="font-medium">{(log.input_tokens ?? 0) + (log.output_tokens ?? 0)}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-lg border bg-muted/30 p-3">
+            <div className="mb-2 text-sm font-medium">Request Flow</div>
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <div className="inline-flex items-center rounded-md border bg-background px-2 py-1">
+                <span className="text-muted-foreground">API Key</span>
+                <span className="ml-2 font-medium">{log.api_key_name || '-'}</span>
+              </div>
+              <ArrowRight className="h-4 w-4 text-muted-foreground" />
+              <div className="inline-flex items-center rounded-md border bg-background px-2 py-1">
+                <span className="text-muted-foreground">Provider</span>
+                <span className="ml-2 font-medium">{log.provider_name || '-'}</span>
+              </div>
+              <ArrowRight className="h-4 w-4 text-muted-foreground" />
+              <div className="inline-flex items-center rounded-md border bg-background px-2 py-1">
+                <span className="text-muted-foreground">Model</span>
+                <span className="ml-2 font-medium">{modelMapping}</span>
+              </div>
+              <ArrowRight className="h-4 w-4 text-muted-foreground" />
+              <div className="inline-flex items-center rounded-md border bg-background px-2 py-1">
+                <span className="text-muted-foreground">Status</span>
+                <span className="ml-2 font-medium">{log.response_status ?? 'Unknown'}</span>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {log.error_info && (
+        <Card className="border-red-200 bg-red-50/50">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base text-red-700">
+              <AlertCircle className="h-4 w-4" />
+              Error
+            </CardTitle>
           </CardHeader>
-
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-              <div className="flex items-start gap-2">
-                <Clock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                <div className="min-w-0">
-                  <div className="text-muted-foreground">Request Time</div>
-                  <div className="truncate font-medium" title={log.request_time}>
-                    {formatDateTime(log.request_time)}
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-start gap-2">
-                <Server className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                <div className="min-w-0">
-                  <div className="text-muted-foreground">Provider</div>
-                  <div className="truncate font-medium" title={log.provider_name}>
-                    {log.provider_name || '-'}
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-start gap-2">
-                <Shield className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                <div className="min-w-0">
-                  <div className="text-muted-foreground">API Key</div>
-                  <div className="truncate font-medium" title={log.api_key_name}>
-                    {log.api_key_name || '-'}
-                    {log.api_key_id ? (
-                      <span className="text-muted-foreground"> ({log.api_key_id})</span>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-start gap-2">
-                <Play className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                <div className="min-w-0">
-                  <div className="text-muted-foreground">Model Mapping</div>
-                  <div className="truncate font-medium" title={modelMapping}>
-                    {modelMapping}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-lg border bg-muted/30 p-3">
-              <div className="mb-2 text-sm font-medium">Metrics</div>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-muted-foreground">TTFB</span>
-                  <span className="font-medium">
-                    {log.first_byte_delay_ms ? `${log.first_byte_delay_ms}ms` : '-'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-muted-foreground">Total</span>
-                  <span className="font-medium">{formatDuration(log.total_time_ms || 0)}</span>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-muted-foreground">Input</span>
-                  <span className="font-medium">{log.input_tokens ?? 0}</span>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-muted-foreground">Output</span>
-                  <span className="font-medium">{log.output_tokens ?? 0}</span>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-muted-foreground">Retries</span>
-                  <span className="font-medium">{log.retry_count ?? 0}</span>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-muted-foreground">Tokens</span>
-                  <span className="font-medium">{(log.input_tokens ?? 0) + (log.output_tokens ?? 0)}</span>
-                </div>
-              </div>
+          <CardContent className="pt-0">
+            <div className="break-words font-mono text-sm text-red-700">
+              {log.error_info}
             </div>
           </CardContent>
         </Card>
+      )}
 
-        {log.error_info && (
-          <Card className="border-red-200 bg-red-50/50">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base text-red-700">
-                <AlertCircle className="h-4 w-4" />
-                Error
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <div className="break-words font-mono text-sm text-red-700">
-                {log.error_info}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-      </div>
-
-      <Card className="lg:col-span-2">
+      <Card>
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
           <div>
             <CardTitle className="text-base">Payload</CardTitle>
@@ -245,21 +269,21 @@ export function LogDetail({ log }: LogDetailProps) {
           {activeTab === 'request' && (
             <div className="space-y-3">
               <div className="text-sm font-medium">Request Body</div>
-              <JsonViewer data={log.request_body} maxHeight="70vh" />
+              <JsonViewer data={log.request_body} maxHeight="65vh" />
             </div>
           )}
 
           {activeTab === 'response' && (
             <div className="space-y-3">
               <div className="text-sm font-medium">Response Body</div>
-              <JsonViewer data={log.response_body || {}} maxHeight="70vh" />
+              <JsonViewer data={log.response_body || {}} maxHeight="65vh" />
             </div>
           )}
 
           {activeTab === 'headers' && (
             <div className="space-y-3">
               <div className="text-sm font-medium">Request Headers</div>
-              <JsonViewer data={log.request_headers} maxHeight="70vh" />
+              <JsonViewer data={log.request_headers} maxHeight="65vh" />
             </div>
           )}
         </CardContent>

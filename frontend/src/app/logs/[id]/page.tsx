@@ -9,7 +9,7 @@ import React from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, RefreshCcw } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { LogDetail } from '@/components/logs';
 import { LoadingSpinner, ErrorState } from '@/components/common';
 import { useLogDetail } from '@/lib/hooks';
@@ -65,13 +65,6 @@ export default function LogDetailPage() {
               Log ID: {log.id}
             </p>
           </div>
-        </div>
-
-        <div className="flex items-center gap-2 sm:justify-end">
-          <Button variant="outline" onClick={() => refetch()} className="gap-2">
-            <RefreshCcw className="h-4 w-4" />
-            Refresh
-          </Button>
         </div>
       </div>
 
