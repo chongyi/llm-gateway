@@ -52,6 +52,177 @@ OPENAI_PROTOCOL = "openai"
 ANTHROPIC_PROTOCOL = "anthropic"
 
 
+def _normalize_openai_tooling_fields(body: dict[str, Any]) -> dict[str, Any]:
+    """
+    Normalize legacy OpenAI function-calling fields to the modern tool-calling fields.
+
+    - functions -> tools
+    - function_call -> tool_choice
+
+    Keeps original fields to avoid breaking upstreams that still accept legacy params.
+    """
+    out = copy.deepcopy(body)
+
+    # Legacy: functions + function_call (deprecated) -> tools + tool_choice
+    if "tools" not in out and isinstance(out.get("functions"), list):
+        tools: list[dict[str, Any]] = []
+        for fn in out["functions"]:
+            if not isinstance(fn, dict):
+                continue
+            name = fn.get("name")
+            if not isinstance(name, str) or not name:
+                continue
+            tool: dict[str, Any] = {"type": "function", "function": {}}
+            tool_fn = tool["function"]
+            tool_fn["name"] = name
+            if isinstance(fn.get("description"), str):
+                tool_fn["description"] = fn.get("description")
+            if isinstance(fn.get("parameters"), dict):
+                tool_fn["parameters"] = fn.get("parameters")
+            tools.append(tool)
+        if tools:
+            out["tools"] = tools
+
+    if "tool_choice" not in out and "function_call" in out:
+        fc = out.get("function_call")
+        if isinstance(fc, str):
+            # "auto" / "none"
+            out["tool_choice"] = fc
+        elif isinstance(fc, dict):
+            name = fc.get("name")
+            if isinstance(name, str) and name:
+                out["tool_choice"] = {"type": "function", "function": {"name": name}}
+
+    return out
+
+
+def _openai_tools_to_anthropic(tools: Any) -> Optional[list[dict[str, Any]]]:
+    if not isinstance(tools, list):
+        return None
+    out: list[dict[str, Any]] = []
+    for t in tools:
+        if not isinstance(t, dict):
+            continue
+        if t.get("type") != "function":
+            continue
+        fn = t.get("function")
+        if not isinstance(fn, dict):
+            continue
+        name = fn.get("name")
+        if not isinstance(name, str) or not name:
+            continue
+        item: dict[str, Any] = {"name": name}
+        if isinstance(fn.get("description"), str):
+            item["description"] = fn.get("description")
+        params = fn.get("parameters")
+        if isinstance(params, dict):
+            item["input_schema"] = params
+        out.append(item)
+    return out or None
+
+
+def _anthropic_tools_to_openai(tools: Any) -> Optional[list[dict[str, Any]]]:
+    if not isinstance(tools, list):
+        return None
+    out: list[dict[str, Any]] = []
+    for t in tools:
+        if not isinstance(t, dict):
+            continue
+        name = t.get("name")
+        if not isinstance(name, str) or not name:
+            continue
+        fn: dict[str, Any] = {"name": name}
+        if isinstance(t.get("description"), str):
+            fn["description"] = t.get("description")
+        schema = t.get("input_schema")
+        if isinstance(schema, dict):
+            fn["parameters"] = schema
+        out.append({"type": "function", "function": fn})
+    return out or None
+
+
+def _openai_tool_choice_to_anthropic(tool_choice: Any) -> Any:
+    if isinstance(tool_choice, str):
+        if tool_choice == "auto":
+            return {"type": "auto"}
+        if tool_choice == "required":
+            return {"type": "any"}
+        # "none" is not universally supported; keep as-is.
+        return tool_choice
+    if isinstance(tool_choice, dict):
+        # OpenAI: {"type":"function","function":{"name":"x"}}
+        fn = tool_choice.get("function")
+        if isinstance(fn, dict) and isinstance(fn.get("name"), str) and fn.get("name"):
+            return {"type": "tool", "name": fn["name"]}
+    return tool_choice
+
+
+def _anthropic_tool_choice_to_openai(tool_choice: Any) -> Any:
+    if isinstance(tool_choice, dict):
+        t = tool_choice.get("type")
+        if t == "auto":
+            return "auto"
+        if t == "any":
+            return "required"
+        if t == "tool" and isinstance(tool_choice.get("name"), str) and tool_choice.get("name"):
+            return {"type": "function", "function": {"name": tool_choice["name"]}}
+    return tool_choice
+
+
+def _ensure_anthropic_tooling_fields(
+    *, source_openai_body: dict[str, Any], target_anthropic_body: dict[str, Any]
+) -> dict[str, Any]:
+    out = target_anthropic_body
+
+    current_tools = out.get("tools")
+    needs_tools_fix = current_tools is None or (
+        isinstance(current_tools, list)
+        and current_tools
+        and isinstance(current_tools[0], dict)
+        and (
+            current_tools[0].get("type") == "function"
+            or "function" in current_tools[0]
+            or "name" not in current_tools[0]
+        )
+    )
+    if needs_tools_fix:
+        tools = _openai_tools_to_anthropic(source_openai_body.get("tools"))
+        if tools is not None:
+            out["tools"] = tools
+
+    current_tool_choice = out.get("tool_choice")
+    needs_tool_choice_fix = current_tool_choice is None or (
+        isinstance(current_tool_choice, dict) and current_tool_choice.get("type") == "function"
+    )
+    if needs_tool_choice_fix and "tool_choice" in source_openai_body:
+        out["tool_choice"] = _openai_tool_choice_to_anthropic(source_openai_body.get("tool_choice"))
+
+    return out
+
+
+def _ensure_openai_tooling_fields(
+    *, source_anthropic_body: dict[str, Any], target_openai_body: dict[str, Any]
+) -> dict[str, Any]:
+    out = target_openai_body
+
+    current_tools = out.get("tools")
+    needs_tools_fix = current_tools is None or (
+        isinstance(current_tools, list)
+        and current_tools
+        and isinstance(current_tools[0], dict)
+        and "type" not in current_tools[0]
+    )
+    if needs_tools_fix:
+        tools = _anthropic_tools_to_openai(source_anthropic_body.get("tools"))
+        if tools is not None:
+            out["tools"] = tools
+
+    if "tool_choice" not in out and "tool_choice" in source_anthropic_body:
+        out["tool_choice"] = _anthropic_tool_choice_to_openai(source_anthropic_body.get("tool_choice"))
+
+    return out
+
+
 def normalize_protocol(protocol: str) -> str:
     protocol = (protocol or OPENAI_PROTOCOL).lower().strip()
     if protocol not in (OPENAI_PROTOCOL, ANTHROPIC_PROTOCOL):
@@ -234,6 +405,8 @@ def convert_request_for_supplier(
 
     if request_protocol == supplier_protocol:
         new_body = copy.deepcopy(body)
+        if request_protocol == OPENAI_PROTOCOL:
+            new_body = _normalize_openai_tooling_fields(new_body)
         new_body["model"] = target_model
         if request_protocol == ANTHROPIC_PROTOCOL and path == "/v1/messages":
             if new_body.get("max_tokens") is None:
@@ -249,7 +422,7 @@ def convert_request_for_supplier(
                 message=f"Unsupported OpenAI endpoint for conversion: {path}",
                 code="unsupported_protocol_conversion",
             )
-        openai_body = copy.deepcopy(body)
+        openai_body = _normalize_openai_tooling_fields(body)
         messages = openai_body.get("messages")
         if not isinstance(messages, list):
             raise ServiceError(message="OpenAI request missing 'messages'", code="invalid_request")
@@ -267,6 +440,10 @@ def convert_request_for_supplier(
             litellm_params={},
             headers={},
         )
+        if isinstance(anthropic_body, dict):
+            anthropic_body = _ensure_anthropic_tooling_fields(
+                source_openai_body=openai_body, target_anthropic_body=anthropic_body
+            )
         return "/v1/messages", anthropic_body
 
     if request_protocol == ANTHROPIC_PROTOCOL and supplier_protocol == OPENAI_PROTOCOL:
@@ -284,6 +461,10 @@ def convert_request_for_supplier(
         else:
             openai_body = _translate_anthropic_to_openai_request(
                 anthropic_body=anthropic_body, target_model=target_model
+            )
+        if isinstance(openai_body, dict):
+            openai_body = _ensure_openai_tooling_fields(
+                source_anthropic_body=anthropic_body, target_openai_body=openai_body
             )
         return "/v1/chat/completions", openai_body
 

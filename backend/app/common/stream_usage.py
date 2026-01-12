@@ -167,6 +167,14 @@ class StreamUsageAccumulator:
                         self._text_parts.append(json.dumps(tool_calls, ensure_ascii=False))
                     except Exception:
                         pass
+
+                # Legacy OpenAI streaming function calling: choices[].delta.function_call
+                function_call = delta.get("function_call")
+                if function_call:
+                    try:
+                        self._text_parts.append(json.dumps(function_call, ensure_ascii=False))
+                    except Exception:
+                        pass
                 continue
 
             # Text Completions stream: choices[].text

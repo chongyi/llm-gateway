@@ -57,6 +57,95 @@ async def test_convert_request_anthropic_to_openai_chat_completions():
     assert out_body["messages"][0]["role"] == "system"
 
 
+def test_convert_request_openai_legacy_functions_normalizes_to_tools():
+    path, out_body = convert_request_for_supplier(
+        request_protocol="openai",
+        supplier_protocol="openai",
+        path="/v1/chat/completions",
+        body={
+            "model": "any",
+            "messages": [{"role": "user", "content": "Hi"}],
+            "functions": [
+                {
+                    "name": "get_weather",
+                    "description": "Get weather",
+                    "parameters": {"type": "object", "properties": {"city": {"type": "string"}}},
+                }
+            ],
+            "function_call": {"name": "get_weather"},
+        },
+        target_model="gpt-4o-mini",
+    )
+
+    assert path == "/v1/chat/completions"
+    assert out_body["model"] == "gpt-4o-mini"
+    assert isinstance(out_body.get("tools"), list)
+    assert out_body["tools"][0]["type"] == "function"
+    assert out_body["tools"][0]["function"]["name"] == "get_weather"
+    assert out_body.get("tool_choice") == {"type": "function", "function": {"name": "get_weather"}}
+
+
+@pytest.mark.asyncio
+async def test_convert_request_openai_to_anthropic_preserves_tools():
+    path, out_body = convert_request_for_supplier(
+        request_protocol="openai",
+        supplier_protocol="anthropic",
+        path="/v1/chat/completions",
+        body={
+            "model": "any",
+            "messages": [{"role": "user", "content": "Hi"}],
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "get_weather",
+                        "description": "Get weather",
+                        "parameters": {"type": "object", "properties": {"city": {"type": "string"}}},
+                    },
+                }
+            ],
+            "tool_choice": {"type": "function", "function": {"name": "get_weather"}},
+        },
+        target_model="claude-3-5-sonnet",
+    )
+
+    assert path == "/v1/messages"
+    assert out_body["model"] == "claude-3-5-sonnet"
+    assert isinstance(out_body.get("tools"), list)
+    assert out_body["tools"][0]["name"] == "get_weather"
+
+
+@pytest.mark.asyncio
+async def test_convert_request_anthropic_to_openai_preserves_tools():
+    path, out_body = convert_request_for_supplier(
+        request_protocol="anthropic",
+        supplier_protocol="openai",
+        path="/v1/messages",
+        body={
+            "model": "any",
+            "system": "You are helpful",
+            "messages": [{"role": "user", "content": "Hi"}],
+            "max_tokens": 16,
+            "tools": [
+                {
+                    "name": "get_weather",
+                    "description": "Get weather",
+                    "input_schema": {"type": "object", "properties": {"city": {"type": "string"}}},
+                }
+            ],
+            "tool_choice": {"type": "tool", "name": "get_weather"},
+        },
+        target_model="gpt-4o-mini",
+    )
+
+    assert path == "/v1/chat/completions"
+    assert out_body["model"] == "gpt-4o-mini"
+    assert isinstance(out_body.get("tools"), list)
+    assert out_body["tools"][0]["type"] == "function"
+    assert out_body["tools"][0]["function"]["name"] == "get_weather"
+    assert out_body.get("tool_choice") == {"type": "function", "function": {"name": "get_weather"}}
+
+
 def test_convert_response_openai_to_anthropic():
     converted = convert_response_for_user(
         request_protocol="anthropic",
