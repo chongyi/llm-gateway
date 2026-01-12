@@ -5,10 +5,11 @@
 
 'use client';
 
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -16,17 +17,35 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Filter, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Filter, X } from 'lucide-react';
 import { LogQueryParams } from '@/types';
 
 interface LogFiltersProps {
   /** Current filter values */
-  filters: Partial<LogQueryParams>;
+  filters: LogQueryParams;
   /** Filter change callback */
   onFilterChange: (filters: Partial<LogQueryParams>) => void;
   /** Providers list (for dropdown) */
   providers: Array<{ id: number; name: string }>;
 }
+
+const FILTER_KEYS: Array<keyof LogQueryParams> = [
+  'start_time',
+  'end_time',
+  'requested_model',
+  'target_model',
+  'provider_id',
+  'has_error',
+  'status_min',
+  'status_max',
+  'api_key_name',
+  'retry_count_min',
+  'retry_count_max',
+  'input_tokens_min',
+  'input_tokens_max',
+  'total_time_min',
+  'total_time_max',
+];
 
 /**
  * Log Filter Component
@@ -36,112 +55,320 @@ export function LogFilters({
   onFilterChange,
   providers,
 }: LogFiltersProps) {
-  const { register, handleSubmit, reset, setValue } = useForm<Partial<LogQueryParams>>({
-    defaultValues: filters,
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  const defaultValues = useMemo<Partial<LogQueryParams>>(
+    () => ({
+      start_time: filters.start_time,
+      end_time: filters.end_time,
+      requested_model: filters.requested_model,
+      target_model: filters.target_model,
+      provider_id: filters.provider_id,
+      has_error: filters.has_error,
+      status_min: filters.status_min,
+      status_max: filters.status_max,
+      api_key_name: filters.api_key_name,
+      retry_count_min: filters.retry_count_min,
+      retry_count_max: filters.retry_count_max,
+      input_tokens_min: filters.input_tokens_min,
+      input_tokens_max: filters.input_tokens_max,
+      total_time_min: filters.total_time_min,
+      total_time_max: filters.total_time_max,
+    }),
+    [
+      filters.api_key_name,
+      filters.end_time,
+      filters.has_error,
+      filters.input_tokens_max,
+      filters.input_tokens_min,
+      filters.provider_id,
+      filters.requested_model,
+      filters.retry_count_max,
+      filters.retry_count_min,
+      filters.start_time,
+      filters.status_max,
+      filters.status_min,
+      filters.target_model,
+      filters.total_time_max,
+      filters.total_time_min,
+    ]
+  );
+
+  const { register, handleSubmit, reset, setValue, watch } = useForm<
+    Partial<LogQueryParams>
+  >({
+    defaultValues,
   });
 
+  useEffect(() => {
+    reset(defaultValues);
+  }, [defaultValues, reset]);
+
   const onReset = () => {
-    reset({
+    const cleared: Partial<LogQueryParams> = {
       page: 1,
-      page_size: filters.page_size,
-    });
-    onFilterChange({});
+      page_size: filters.page_size ?? 20,
+    };
+    for (const key of FILTER_KEYS) cleared[key] = undefined;
+    reset(cleared);
+    onFilterChange(cleared);
   };
 
   const onSubmit = (data: Partial<LogQueryParams>) => {
-    // Remove empty values
-    const cleanData = Object.fromEntries(
-      Object.entries(data).filter(([_, v]) => v !== undefined && v !== '')
-    );
-    onFilterChange(cleanData);
+    const normalized: Partial<LogQueryParams> = {
+      page: 1,
+      page_size: filters.page_size ?? 20,
+    };
+
+    for (const key of FILTER_KEYS) {
+      const value = data[key];
+      if (value === '') {
+        normalized[key] = undefined;
+        continue;
+      }
+      if (typeof value === 'number' && Number.isNaN(value)) {
+        normalized[key] = undefined;
+        continue;
+      }
+      normalized[key] = value;
+    }
+
+    onFilterChange(normalized);
   };
+
+  const providerValue =
+    watch('provider_id') === undefined ? 'all' : String(watch('provider_id'));
+
+  const errorValue =
+    watch('has_error') === undefined
+      ? 'all'
+      : watch('has_error')
+        ? 'true'
+        : 'false';
 
   return (
     <form
       onSubmit={handleSubmit(onSubmit)}
       className="mb-6 rounded-lg border bg-card p-4 shadow-sm"
     >
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {/* Date Range */}
-        <div className="flex gap-2">
-          <Input
-            type="datetime-local"
-            placeholder="Start Time"
-            {...register('start_time')}
-            className="w-full"
-          />
-          <Input
-            type="datetime-local"
-            placeholder="End Time"
-            {...register('end_time')}
-            className="w-full"
-          />
+      <div className="space-y-4">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="space-y-2">
+            <Label>Start Time</Label>
+            <Input type="datetime-local" {...register('start_time')} />
+          </div>
+
+          <div className="space-y-2">
+            <Label>End Time</Label>
+            <Input type="datetime-local" {...register('end_time')} />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Requested Model</Label>
+            <Input
+              placeholder="Fuzzy match"
+              {...register('requested_model')}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Target Model</Label>
+            <Input
+              placeholder="Fuzzy match"
+              {...register('target_model')}
+            />
+          </div>
         </div>
 
-        {/* Model */}
-        <Input
-          placeholder="Model Name (Requested/Target)"
-          {...register('requested_model')}
-        />
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="space-y-2">
+            <Label>Provider</Label>
+            <Select
+              value={providerValue}
+              onValueChange={(value) =>
+                setValue(
+                  'provider_id',
+                  value === 'all' ? undefined : Number(value),
+                  { shouldDirty: true }
+                )
+              }
+            >
+              <SelectTrigger className="w-full min-w-0">
+                <SelectValue placeholder="All" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                {providers.map((p) => (
+                  <SelectItem key={p.id} value={String(p.id)}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-        {/* Trace ID */}
-        <Input
-          placeholder="Trace ID"
-          {...register('trace_id')}
-        />
+          <div className="space-y-2">
+            <Label>Has Error</Label>
+            <Select
+              value={errorValue}
+              onValueChange={(value) =>
+                setValue(
+                  'has_error',
+                  value === 'all' ? undefined : value === 'true',
+                  { shouldDirty: true }
+                )
+              }
+            >
+              <SelectTrigger className="w-full min-w-0">
+                <SelectValue placeholder="All" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="true">Has Error</SelectItem>
+                <SelectItem value="false">No Error</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-        {/* Provider */}
-        <Select
-          onValueChange={(value) => 
-            setValue('provider_id', value === 'all' ? undefined : Number(value))
-          }
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Select Provider" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Providers</SelectItem>
-            {providers.map((p) => (
-              <SelectItem key={p.id} value={String(p.id)}>
-                {p.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {/* Status */}
-        <Select
-          onValueChange={(value) => {
-            if (value === 'error') {
-              setValue('has_error', true);
-            } else if (value === 'success') {
-              setValue('has_error', false);
-            } else {
-              setValue('has_error', undefined);
-            }
-          }}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Request Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
-            <SelectItem value="success">Success</SelectItem>
-            <SelectItem value="error">Failed</SelectItem>
-          </SelectContent>
-        </Select>
-        
-        {/* Buttons */}
-        <div className="flex gap-2 lg:col-span-3 lg:justify-end">
-          <Button type="button" variant="outline" onClick={onReset}>
-            <X className="mr-2 h-4 w-4" />
-            Reset
-          </Button>
-          <Button type="submit">
-            <Filter className="mr-2 h-4 w-4" />
-            Filter
-          </Button>
+          <div className="flex items-end justify-end gap-2">
+            <Button type="button" variant="outline" onClick={onReset}>
+              <X className="mr-2 h-4 w-4" />
+              Reset
+            </Button>
+            <Button type="submit">
+              <Filter className="mr-2 h-4 w-4" />
+              Filter
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="shrink-0"
+              aria-label="Toggle advanced filters"
+              onClick={() => setShowAdvanced((v) => !v)}
+            >
+              {showAdvanced ? (
+                <ChevronUp className="h-4 w-4" />
+              ) : (
+                <ChevronDown className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
         </div>
+
+        {showAdvanced && (
+          <div className="space-y-4 border-t pt-4">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <div className="space-y-2">
+                <Label>Status Code Range</Label>
+                <div className="flex gap-2">
+                  <Input
+                    type="number"
+                    placeholder="Min"
+                    className="min-w-0 flex-1"
+                    {...register('status_min', {
+                      setValueAs: (v) =>
+                        v === '' ? undefined : Number(v),
+                    })}
+                  />
+                  <Input
+                    type="number"
+                    placeholder="Max"
+                    className="min-w-0 flex-1"
+                    {...register('status_max', {
+                      setValueAs: (v) =>
+                        v === '' ? undefined : Number(v),
+                    })}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Retry Count Range</Label>
+                <div className="flex gap-2">
+                  <Input
+                    type="number"
+                    min={0}
+                    placeholder="Min"
+                    className="min-w-0 flex-1"
+                    {...register('retry_count_min', {
+                      setValueAs: (v) =>
+                        v === '' ? undefined : Number(v),
+                    })}
+                  />
+                  <Input
+                    type="number"
+                    min={0}
+                    placeholder="Max"
+                    className="min-w-0 flex-1"
+                    {...register('retry_count_max', {
+                      setValueAs: (v) =>
+                        v === '' ? undefined : Number(v),
+                    })}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>API Key Name</Label>
+                <Input
+                  placeholder="Fuzzy match"
+                  {...register('api_key_name')}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Input Tokens Range</Label>
+                <div className="flex gap-2">
+                  <Input
+                    type="number"
+                    placeholder="Min"
+                    className="min-w-0 flex-1"
+                    {...register('input_tokens_min', {
+                      setValueAs: (v) =>
+                        v === '' ? undefined : Number(v),
+                    })}
+                  />
+                  <Input
+                    type="number"
+                    placeholder="Max"
+                    className="min-w-0 flex-1"
+                    {...register('input_tokens_max', {
+                      setValueAs: (v) =>
+                        v === '' ? undefined : Number(v),
+                    })}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <div className="space-y-2">
+                <Label>Total Duration Range (ms)</Label>
+                <div className="flex gap-2">
+                  <Input
+                    type="number"
+                    placeholder="Min"
+                    className="min-w-0 flex-1"
+                    {...register('total_time_min', {
+                      setValueAs: (v) =>
+                        v === '' ? undefined : Number(v),
+                    })}
+                  />
+                  <Input
+                    type="number"
+                    placeholder="Max"
+                    className="min-w-0 flex-1"
+                    {...register('total_time_max', {
+                      setValueAs: (v) =>
+                        v === '' ? undefined : Number(v),
+                    })}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </form>
   );

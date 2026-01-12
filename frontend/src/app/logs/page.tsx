@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { LogFilters, LogList } from '@/components/logs';
 import { Pagination, LoadingSpinner, ErrorState, EmptyState } from '@/components/common';
 import { useLogs, useProviders } from '@/lib/hooks';
-import { LogQueryParams } from '@/types';
+import { LogQueryParams, RequestLog } from '@/types';
 
 /** Default Filter Parameters */
 const DEFAULT_FILTERS: LogQueryParams = {
@@ -31,18 +31,6 @@ export default function LogsPage() {
   const { data, isLoading, isError, refetch } = useLogs(filters);
   const { data: providersData } = useProviders({ is_active: true });
 
-  // Execute Search
-  const handleSearch = useCallback(() => {
-    // Reset page to 1
-    setFilters((prev) => ({ ...prev, page: 1 }));
-    refetch();
-  }, [refetch]);
-
-  // Reset Filters
-  const handleReset = useCallback(() => {
-    setFilters(DEFAULT_FILTERS);
-  }, []);
-
   // Page Change
   const handlePageChange = useCallback((page: number) => {
     setFilters((prev) => ({ ...prev, page }));
@@ -59,7 +47,7 @@ export default function LogsPage() {
   }, []);
 
   // View Log Detail
-  const handleViewLog = useCallback((log: any) => {
+  const handleViewLog = useCallback((log: RequestLog) => {
     // Navigate to log detail page
     window.location.href = `/logs/${log.id}`;
   }, []);

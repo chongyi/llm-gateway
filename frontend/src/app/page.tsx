@@ -90,7 +90,7 @@ export default function HomePage() {
           <ul className="list-inside list-disc space-y-2">
             <li>
               <strong>Transparent Proxy:</strong>
-              Compatible with OpenAI/Anthropic client invocation methods, only modifies the 'model' field
+              Compatible with OpenAI/Anthropic client invocation methods, only modifies the &apos;model&apos; field
             </li>
             <li>
               <strong>Rule Engine:</strong>
