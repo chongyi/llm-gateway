@@ -16,15 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
-import { CalendarIcon, Filter, X } from 'lucide-react';
-import { format } from 'date-fns';
-import { cn } from '@/lib/utils';
+import { Filter, X } from 'lucide-react';
 import { LogQueryParams } from '@/types';
 
 interface LogFiltersProps {
@@ -44,13 +36,9 @@ export function LogFilters({
   onFilterChange,
   providers,
 }: LogFiltersProps) {
-  const { register, handleSubmit, reset, setValue, watch } = useForm<Partial<LogQueryParams>>({
+  const { register, handleSubmit, reset, setValue } = useForm<Partial<LogQueryParams>>({
     defaultValues: filters,
   });
-
-  const startTime = watch('start_time');
-  const endTime = watch('end_time');
-  const hasError = watch('has_error');
 
   const onReset = () => {
     reset({
@@ -76,62 +64,18 @@ export function LogFilters({
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {/* Date Range */}
         <div className="flex gap-2">
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                className={cn(
-                  'w-full justify-start text-left font-normal',
-                  !startTime && 'text-muted-foreground'
-                )}
-              >
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {startTime ? (
-                  format(new Date(startTime), 'yyyy-MM-dd')
-                ) : (
-                  <span>Start Date</span>
-                )}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0">
-              <Calendar
-                mode="single"
-                selected={startTime ? new Date(startTime) : undefined}
-                onSelect={(date) => 
-                  setValue('start_time', date ? date.toISOString() : undefined)
-                }
-                initialFocus
-              />
-            </PopoverContent>
-          </Popover>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                className={cn(
-                  'w-full justify-start text-left font-normal',
-                  !endTime && 'text-muted-foreground'
-                )}
-              >
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {endTime ? (
-                  format(new Date(endTime), 'yyyy-MM-dd')
-                ) : (
-                  <span>End Date</span>
-                )}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0">
-              <Calendar
-                mode="single"
-                selected={endTime ? new Date(endTime) : undefined}
-                onSelect={(date) =>
-                  setValue('end_time', date ? date.toISOString() : undefined)
-                }
-                initialFocus
-              />
-            </PopoverContent>
-          </Popover>
+          <Input
+            type="datetime-local"
+            placeholder="Start Time"
+            {...register('start_time')}
+            className="w-full"
+          />
+          <Input
+            type="datetime-local"
+            placeholder="End Time"
+            {...register('end_time')}
+            className="w-full"
+          />
         </div>
 
         {/* Model */}
@@ -143,7 +87,7 @@ export function LogFilters({
         {/* Trace ID */}
         <Input
           placeholder="Trace ID"
-          {...register('trace_id')} // NOTE: Backend needs support or fuzzy search
+          {...register('trace_id')}
         />
 
         {/* Provider */}

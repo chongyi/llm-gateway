@@ -5,18 +5,16 @@
 
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from '@/components/ui/sheet';
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
 import { Clock, Server, AlertCircle, Shield, Play } from 'lucide-react';
 import { RequestLog } from '@/types';
 import { formatDateTime, getStatusColor, formatDuration } from '@/lib/utils';
@@ -35,29 +33,31 @@ interface LogDetailProps {
  * Log Detail Component
  */
 export function LogDetail({ log, open, onOpenChange }: LogDetailProps) {
+  const [activeTab, setActiveTab] = useState<'request' | 'response' | 'headers'>('request');
+
   if (!log) return null;
 
   const statusColor = getStatusColor(log.response_status);
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-[800px] sm:max-w-[800px] p-0">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto p-0 gap-0">
         <div className="flex h-full flex-col">
           {/* Header */}
           <div className="border-b p-6">
-            <SheetHeader>
+            <DialogHeader>
               <div className="flex items-start justify-between">
                 <div>
-                  <SheetTitle className="text-xl font-bold">Request Log Details</SheetTitle>
-                  <SheetDescription className="mt-1 flex items-center gap-2">
+                  <DialogTitle className="text-xl font-bold">Request Log Details</DialogTitle>
+                  <DialogDescription className="mt-1 flex items-center gap-2">
                     <span className="font-mono">{log.trace_id}</span>
-                  </SheetDescription>
+                  </DialogDescription>
                 </div>
                 <Badge className={statusColor.className}>
                   {log.response_status || 'Unknown'}
                 </Badge>
               </div>
-            </SheetHeader>
+            </DialogHeader>
 
             {/* Basic Info */}
             <div className="mt-6 grid grid-cols-2 gap-4 text-sm">
@@ -92,7 +92,7 @@ export function LogDetail({ log, open, onOpenChange }: LogDetailProps) {
             </div>
 
             {/* Metrics */}
-            <div className="mt-4 flex gap-4 rounded-lg bg-muted/50 p-3 text-sm">
+            <div className="mt-4 flex gap-4 rounded-lg bg-muted/50 p-3 text-sm flex-wrap">
               <div>
                 <span className="text-muted-foreground">Latency:</span>
                 <span className="ml-1 font-medium">{log.first_byte_delay_ms}ms</span>
@@ -127,38 +127,71 @@ export function LogDetail({ log, open, onOpenChange }: LogDetailProps) {
           </div>
 
           {/* Content Area */}
-          <ScrollArea className="flex-1 p-6">
-            <Tabs defaultValue="request" className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="request">Request Content</TabsTrigger>
-                <TabsTrigger value="response">Response Content</TabsTrigger>
-                <TabsTrigger value="headers">Headers Info</TabsTrigger>
-              </TabsList>
+          <div className="flex-1 p-6">
+            <div className="w-full">
+              <div className="flex border-b mb-4">
+                <button
+                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                    activeTab === 'request'
+                      ? 'border-primary text-primary'
+                      : 'border-transparent text-muted-foreground hover:text-foreground'
+                  }`}
+                  onClick={() => setActiveTab('request')}
+                >
+                  Request Content
+                </button>
+                <button
+                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                    activeTab === 'response'
+                      ? 'border-primary text-primary'
+                      : 'border-transparent text-muted-foreground hover:text-foreground'
+                  }`}
+                  onClick={() => setActiveTab('response')}
+                >
+                  Response Content
+                </button>
+                <button
+                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                    activeTab === 'headers'
+                      ? 'border-primary text-primary'
+                      : 'border-transparent text-muted-foreground hover:text-foreground'
+                  }`}
+                  onClick={() => setActiveTab('headers')}
+                >
+                  Headers Info
+                </button>
+              </div>
               
-              <TabsContent value="request" className="mt-4 space-y-4">
-                <div>
-                  <h4 className="mb-2 text-sm font-medium">Request Body</h4>
-                  <JsonViewer data={log.request_body} />
+              {activeTab === 'request' && (
+                <div className="mt-4 space-y-4">
+                  <div>
+                    <h4 className="mb-2 text-sm font-medium">Request Body</h4>
+                    <JsonViewer data={log.request_body} />
+                  </div>
                 </div>
-              </TabsContent>
+              )}
               
-              <TabsContent value="response" className="mt-4 space-y-4">
-                <div>
-                  <h4 className="mb-2 text-sm font-medium">Response Body</h4>
-                  <JsonViewer data={log.response_body || {}} />
+              {activeTab === 'response' && (
+                <div className="mt-4 space-y-4">
+                  <div>
+                    <h4 className="mb-2 text-sm font-medium">Response Body</h4>
+                    <JsonViewer data={log.response_body || {}} />
+                  </div>
                 </div>
-              </TabsContent>
+              )}
               
-              <TabsContent value="headers" className="mt-4 space-y-4">
-                <div>
-                  <h4 className="mb-2 text-sm font-medium">Request Headers</h4>
-                  <JsonViewer data={log.request_headers} />
+              {activeTab === 'headers' && (
+                <div className="mt-4 space-y-4">
+                  <div>
+                    <h4 className="mb-2 text-sm font-medium">Request Headers</h4>
+                    <JsonViewer data={log.request_headers} />
+                  </div>
                 </div>
-              </TabsContent>
-            </Tabs>
-          </ScrollArea>
+              )}
+            </div>
+          </div>
         </div>
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -23,12 +23,6 @@ import {
 } from 'lucide-react';
 import { RequestLog } from '@/types';
 import { formatDateTime, getStatusColor, formatDuration } from '@/lib/utils';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 
 interface LogListProps {
   /** Log list data */
@@ -122,19 +116,12 @@ export function LogList({ logs, onView }: LogListProps) {
                   </span>
                   <span className="text-muted-foreground">/</span>
                   {log.is_stream ? (
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger>
-                          <Waves className="h-4 w-4 text-blue-500" />
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Stream Request</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
+                    <span title="Stream Request">
+                      <Waves className="h-4 w-4 text-blue-500" />
+                    </span>
                   ) : (
                     <span className="text-muted-foreground">-</span>
-                  <bos>)
+                  )}
                 </div>
               </TableCell>
               <TableCell className="text-right">
