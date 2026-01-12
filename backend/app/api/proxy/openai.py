@@ -9,10 +9,37 @@ from typing import Any
 from fastapi import APIRouter, Header, Request, status
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
-from app.api.deps import CurrentApiKey, ProxyServiceDep
+from app.api.deps import CurrentApiKey, ModelServiceDep, ProxyServiceDep
 from app.common.errors import AppError
 
 router = APIRouter(tags=["Proxy - OpenAI"])
+
+
+@router.get("/v1/models")
+async def list_models(
+    api_key: CurrentApiKey,
+    service: ModelServiceDep,
+):
+    """
+    OpenAI Models API (List)
+
+    Returns active requested models configured in the gateway.
+    """
+    try:
+        items, _total = await service.get_all_mappings(is_active=True, page=1, page_size=1000)
+        return {
+            "object": "list",
+            "data": [
+                {
+                    "id": item.requested_model,
+                    "object": "model",
+                    "owned_by": "system",
+                }
+                for item in items
+            ],
+        }
+    except AppError as e:
+        return JSONResponse(content=e.to_dict(), status_code=e.status_code)
 
 
 async def _handle_proxy_request(

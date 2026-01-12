@@ -4,6 +4,7 @@ API Key Management Service Module
 Provides business logic processing for API Keys.
 """
 
+from datetime import datetime
 from typing import Optional
 
 from app.common.errors import ConflictError, NotFoundError, AuthenticationError
@@ -205,7 +206,7 @@ class ApiKeyService:
             )
         
         # Update last used time
-        await self.repo.update_last_used(api_key.id)
+        await self.repo.update_last_used(api_key.id, datetime.utcnow())
         
         return api_key
     
