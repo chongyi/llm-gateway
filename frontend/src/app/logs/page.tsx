@@ -7,10 +7,12 @@
 
 import React, { useState, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { LogFilters, LogList } from '@/components/logs';
 import { Pagination, LoadingSpinner, ErrorState, EmptyState } from '@/components/common';
 import { useLogs, useProviders } from '@/lib/hooks';
 import { LogQueryParams, RequestLog } from '@/types';
+import { RefreshCw } from 'lucide-react';
 
 /** Default Filter Parameters */
 const DEFAULT_FILTERS: LogQueryParams = {
@@ -31,6 +33,33 @@ export default function LogsPage() {
   const { data, isLoading, isError, refetch } = useLogs(filters);
   const { data: providersData } = useProviders({ is_active: true });
 
+  const areLogQueryParamsEqual = useCallback((a: LogQueryParams, b: LogQueryParams) => {
+    const keys: Array<keyof LogQueryParams> = [
+      'start_time',
+      'end_time',
+      'requested_model',
+      'target_model',
+      'provider_id',
+      'status_min',
+      'status_max',
+      'has_error',
+      'api_key_id',
+      'api_key_name',
+      'retry_count_min',
+      'retry_count_max',
+      'input_tokens_min',
+      'input_tokens_max',
+      'total_time_min',
+      'total_time_max',
+      'page',
+      'page_size',
+      'sort_by',
+      'sort_order',
+    ];
+
+    return keys.every((key) => Object.is(a[key], b[key]));
+  }, []);
+
   // Page Change
   const handlePageChange = useCallback((page: number) => {
     setFilters((prev) => ({ ...prev, page }));
@@ -43,8 +72,15 @@ export default function LogsPage() {
 
   // Handle filter change from LogFilters component
   const handleFilterChange = useCallback((newFilters: Partial<LogQueryParams>) => {
-    setFilters((prev) => ({ ...prev, ...newFilters, page: 1 })); // Reset to page 1 on filter change
-  }, []);
+    setFilters((prev) => {
+      const next = { ...prev, ...newFilters, page: 1 };
+      if (areLogQueryParamsEqual(prev, next)) {
+        void refetch();
+        return prev;
+      }
+      return next;
+    }); // Reset to page 1 on filter change
+  }, [areLogQueryParamsEqual, refetch]);
 
   // View Log Detail
   const handleViewLog = useCallback((log: RequestLog) => {
@@ -71,8 +107,21 @@ export default function LogsPage() {
 
       {/* Data List */}
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Log List</CardTitle>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="Refresh log list"
+            onClick={() => refetch()}
+            disabled={isLoading}
+          >
+            <RefreshCw
+              className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`}
+              suppressHydrationWarning
+            />
+          </Button>
         </CardHeader>
         <CardContent>
           {isLoading && <LoadingSpinner />}
