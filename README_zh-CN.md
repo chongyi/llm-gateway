@@ -103,6 +103,17 @@ docker run --rm -p 8000:8000 -v $(pwd)/data:/data llm-gateway
 - API：`http://localhost:8000/v1/...` 与 `http://localhost:8000/api/admin/...`
 - 如使用 SQLite，建议挂载 `/data` 持久化数据库（或通过 `DATABASE_URL` 使用外部数据库）。
 
+### Docker Compose（一键启动）
+
+```bash
+cp .env.example .env
+./start.sh
+```
+
+- 停止：`./stop.sh`（或 `./start.sh down`）
+- 默认数据库：PostgreSQL（服务名 `postgres`）
+- 使用 SQLite：在 `.env` 中设置 `DATABASE_TYPE/DATABASE_URL`（见 `.env.example`）
+
 ## ⚙️ 配置说明
 
 配置通过环境变量或 `backend/` 目录下的 `.env` 文件进行管理。
