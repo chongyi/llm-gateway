@@ -35,10 +35,10 @@ class ModelRepository(ABC):
     
     @abstractmethod
     async def get_all_mappings(
-        self, 
-        page: int = 1, 
+        self,
+        is_active: Optional[bool] = None,
+        page: int = 1,
         page_size: int = 20,
-        is_active: Optional[bool] = None
     ) -> Tuple[List[ModelMapping], int]:
         """Get Model Mapping List"""
         pass
@@ -56,7 +56,9 @@ class ModelRepository(ABC):
     # ============ Model-Provider Mapping ============
     
     @abstractmethod
-    async def add_provider_mapping(self, data: ModelMappingProviderCreate) -> ModelMappingProvider:
+    async def add_provider_mapping(
+        self, data: ModelMappingProviderCreate
+    ) -> ModelMappingProviderResponse:
         """Add Model-Provider Mapping"""
         pass
     
@@ -87,6 +89,11 @@ class ModelRepository(ABC):
         is_active: Optional[bool] = None
     ) -> List[ModelMappingProviderResponse]:
         """Get all model-provider mappings (supports filtering)"""
+        pass
+
+    @abstractmethod
+    async def get_provider_count(self, requested_model: str) -> int:
+        """Get the count of providers associated with the model"""
         pass
     
     @abstractmethod

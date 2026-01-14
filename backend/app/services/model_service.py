@@ -198,7 +198,7 @@ class ModelService:
             )
         
         # Check if mapping already exists
-        existing = await self.model_repo.get_provider_mappings(
+        existing = await self.model_repo.get_all_provider_mappings(
             requested_model=data.requested_model,
             provider_id=data.provider_id,
         )
@@ -208,7 +208,7 @@ class ModelService:
                 code="duplicate_mapping",
             )
         
-        return await self.model_repo.create_provider_mapping(data)
+        return await self.model_repo.add_provider_mapping(data)
     
     async def get_provider_mappings(
         self,
@@ -227,8 +227,10 @@ class ModelService:
         Returns:
             list[ModelMappingProviderResponse]: Mapping list
         """
-        return await self.model_repo.get_provider_mappings(
-            requested_model, provider_id, is_active
+        return await self.model_repo.get_all_provider_mappings(
+            requested_model=requested_model,
+            provider_id=provider_id,
+            is_active=is_active,
         )
     
     async def update_provider_mapping(

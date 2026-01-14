@@ -175,7 +175,7 @@ class SQLAlchemyModelRepository(ModelRepository):
     
     async def add_provider_mapping(
         self, data: ModelMappingProviderCreate
-    ) -> ModelMappingProvider:
+    ) -> ModelMappingProviderResponse:
         """Create Model-Provider Mapping"""
         entity = ModelMappingProviderORM(
             requested_model=data.requested_model,
