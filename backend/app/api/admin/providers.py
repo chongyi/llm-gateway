@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from app.api.deps import ProviderServiceDep, require_admin_auth
 from app.common.errors import AppError
-from app.domain.provider import ProviderCreate, ProviderUpdate, ProviderResponse
+from app.domain.provider import ProviderCreate, ProviderUpdate, ProviderResponse, ProviderExport
 
 router = APIRouter(
     prefix="/admin/providers",
@@ -27,6 +27,40 @@ class PaginatedProviderResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+class ImportProviderResponse(BaseModel):
+    """Import Provider Response"""
+    success: int
+    skipped: int
+
+
+@router.get("/export", response_model=list[ProviderExport])
+async def export_providers(
+    service: ProviderServiceDep,
+):
+    """
+    Export all providers
+    """
+    try:
+        return await service.export_data()
+    except AppError as e:
+        return JSONResponse(content=e.to_dict(), status_code=e.status_code)
+
+
+@router.post("/import", response_model=ImportProviderResponse)
+async def import_providers(
+    data: list[ProviderCreate],
+    service: ProviderServiceDep,
+):
+    """
+    Import providers
+    """
+    try:
+        result = await service.import_data(data)
+        return ImportProviderResponse(**result)
+    except AppError as e:
+        return JSONResponse(content=e.to_dict(), status_code=e.status_code)
 
 
 @router.get("", response_model=PaginatedProviderResponse)

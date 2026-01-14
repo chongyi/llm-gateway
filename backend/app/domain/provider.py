@@ -73,3 +73,8 @@ class ProviderResponse(ProviderBase):
     
     class Config:
         from_attributes = True
+
+
+class ProviderExport(ProviderCreate):
+    """Provider Export Model (Includes API Key)"""
+    pass

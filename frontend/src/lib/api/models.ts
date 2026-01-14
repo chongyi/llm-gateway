@@ -111,3 +111,18 @@ export async function updateModelProvider(
 export async function deleteModelProvider(id: number): Promise<void> {
   return del<void>(`${MODEL_PROVIDERS_URL}/${id}`);
 }
+
+/**
+ * Export Models
+ */
+export async function exportModels(): Promise<any[]> {
+  return get<any[]>(`${MODELS_URL}/export`);
+}
+
+/**
+ * Import Models
+ * @param data - List of models to import
+ */
+export async function importModels(data: any[]): Promise<{success: number; skipped: number; errors: string[]}> {
+  return post<{success: number; skipped: number; errors: string[]}>(`${MODELS_URL}/import`, data);
+}

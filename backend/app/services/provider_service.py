@@ -155,6 +155,56 @@ class ProviderService:
             )
         
         await self.repo.delete(id)
+
+    async def export_data(self) -> list[ProviderCreate]:
+        """
+        Export all providers
+        
+        Returns:
+            list[ProviderCreate]: List of providers with full details
+        """
+        # Get all providers without pagination (using a large limit)
+        providers, _ = await self.repo.get_all(page=1, page_size=10000)
+        
+        export_list = []
+        for p in providers:
+            export_list.append(
+                ProviderCreate(
+                    name=p.name,
+                    base_url=p.base_url,
+                    protocol=p.protocol,
+                    api_type=p.api_type,
+                    extra_headers=p.extra_headers,
+                    api_key=p.api_key,
+                    is_active=p.is_active
+                )
+            )
+        return export_list
+
+    async def import_data(self, data: list[ProviderCreate]) -> dict[str, int]:
+        """
+        Import providers
+        
+        Args:
+            data: List of providers to import
+            
+        Returns:
+            dict: Import summary (success, skipped)
+        """
+        success = 0
+        skipped = 0
+        
+        for item in data:
+            # Check if name already exists
+            existing = await self.repo.get_by_name(item.name)
+            if existing:
+                skipped += 1
+                continue
+            
+            await self.repo.create(item)
+            success += 1
+            
+        return {"success": success, "skipped": skipped}
     
     def _to_response(self, provider: Provider) -> ProviderResponse:
         """

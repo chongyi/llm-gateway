@@ -277,6 +277,104 @@ class ModelService:
             )
         
         await self.model_repo.delete_provider_mapping(id)
+
+    async def export_data(self) -> list["ModelExport"]:
+        """
+        Export all models with their provider mappings
+        
+        Returns:
+            list[ModelExport]: List of models
+        """
+        from app.domain.model import ModelExport, ModelProviderExport
+
+        # Get all model mappings
+        mappings, _ = await self.model_repo.get_all_mappings(page=1, page_size=10000)
+        
+        export_list = []
+        for m in mappings:
+            # Get provider mappings for this model
+            provider_mappings = await self.model_repo.get_provider_mappings(
+                requested_model=m.requested_model
+            )
+            
+            providers_export = []
+            for pm in provider_mappings:
+                providers_export.append(
+                    ModelProviderExport(
+                        provider_name=pm.provider_name,
+                        target_model_name=pm.target_model_name,
+                        provider_rules=pm.provider_rules,
+                        priority=pm.priority,
+                        weight=pm.weight,
+                        is_active=pm.is_active
+                    )
+                )
+            
+            export_list.append(
+                ModelExport(
+                    requested_model=m.requested_model,
+                    strategy=m.strategy,
+                    matching_rules=m.matching_rules,
+                    capabilities=m.capabilities,
+                    is_active=m.is_active,
+                    providers=providers_export
+                )
+            )
+            
+        return export_list
+
+    async def import_data(self, data: list["ModelExport"]) -> dict:
+        """
+        Import models
+        
+        Args:
+            data: List of models to import
+            
+        Returns:
+            dict: Import summary
+        """
+        success = 0
+        skipped = 0
+        errors = []
+        
+        for item in data:
+            # Check if model already exists
+            existing = await self.model_repo.get_mapping(item.requested_model)
+            if existing:
+                skipped += 1
+                continue
+            
+            # Create model mapping
+            try:
+                await self.model_repo.create_mapping(item)
+                
+                # Create provider mappings
+                for p_item in item.providers:
+                    provider = await self.provider_repo.get_by_name(p_item.provider_name)
+                    if not provider:
+                        errors.append(
+                            f"Model '{item.requested_model}': Provider '{p_item.provider_name}' not found. Mapping skipped."
+                        )
+                        continue
+                    
+                    from app.domain.model import ModelMappingProviderCreate
+                    await self.model_repo.create_provider_mapping(
+                        ModelMappingProviderCreate(
+                            requested_model=item.requested_model,
+                            provider_id=provider.id,
+                            target_model_name=p_item.target_model_name,
+                            provider_rules=p_item.provider_rules,
+                            priority=p_item.priority,
+                            weight=p_item.weight,
+                            is_active=p_item.is_active
+                        )
+                    )
+                
+                success += 1
+            except Exception as e:
+                errors.append(f"Model '{item.requested_model}': {str(e)}")
+        
+        return {"success": success, "skipped": skipped, "errors": errors}
     
     async def _to_mapping_response(
         self, mapping: ModelMapping, include_providers: bool = False

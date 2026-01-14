@@ -47,3 +47,8 @@ class ProviderRepository(ABC):
     async def delete(self, id: int) -> bool:
         """Delete Provider"""
         pass
+
+    @abstractmethod
+    async def has_model_mappings(self, id: int) -> bool:
+        """Check if provider has associated model mappings"""
+        pass

@@ -19,6 +19,7 @@ from app.domain.model import (
     ModelMappingProviderCreate,
     ModelMappingProviderUpdate,
     ModelMappingProviderResponse,
+    ModelExport,
 )
 
 router = APIRouter(
@@ -42,7 +43,42 @@ class ModelProviderListResponse(BaseModel):
     total: int
 
 
+class ImportModelResponse(BaseModel):
+    """Import Model Response"""
+    success: int
+    skipped: int
+    errors: list[str]
+
+
 # ============ Model Mapping Endpoints ============
+
+@router.get("/models/export", response_model=list[ModelExport])
+async def export_models(
+    service: ModelServiceDep,
+):
+    """
+    Export all models
+    """
+    try:
+        return await service.export_data()
+    except AppError as e:
+        return JSONResponse(content=e.to_dict(), status_code=e.status_code)
+
+
+@router.post("/models/import", response_model=ImportModelResponse)
+async def import_models(
+    data: list[ModelExport],
+    service: ModelServiceDep,
+):
+    """
+    Import models
+    """
+    try:
+        result = await service.import_data(data)
+        return ImportModelResponse(**result)
+    except AppError as e:
+        return JSONResponse(content=e.to_dict(), status_code=e.status_code)
+
 
 @router.get("/models", response_model=PaginatedModelResponse)
 async def list_models(

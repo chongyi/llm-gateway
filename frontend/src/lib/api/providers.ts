@@ -59,3 +59,18 @@ export async function updateProvider(
 export async function deleteProvider(id: number): Promise<void> {
   return del<void>(`${BASE_URL}/${id}`);
 }
+
+/**
+ * Export Providers
+ */
+export async function exportProviders(): Promise<any[]> {
+  return get<any[]>(`${BASE_URL}/export`);
+}
+
+/**
+ * Import Providers
+ * @param data - List of providers to import
+ */
+export async function importProviders(data: any[]): Promise<{success: number; skipped: number}> {
+  return post<{success: number; skipped: number}>(`${BASE_URL}/import`, data);
+}

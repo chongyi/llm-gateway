@@ -129,5 +129,20 @@ class ModelMappingProviderResponse(ModelMappingProvider):
         from_attributes = True
 
 
+class ModelProviderExport(BaseModel):
+    """Model Provider Export Model (Uses Provider Name instead of ID)"""
+    provider_name: str
+    target_model_name: str
+    provider_rules: Optional[dict[str, Any]] = None
+    priority: int = 0
+    weight: int = 1
+    is_active: bool = True
+
+
+class ModelExport(ModelMappingCreate):
+    """Model Export Model"""
+    providers: list[ModelProviderExport] = []
+
+
 # Resolve circular reference
 ModelMappingResponse.model_rebuild()

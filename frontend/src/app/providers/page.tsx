@@ -5,10 +5,10 @@
 
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus } from 'lucide-react';
+import { Plus, Download, Upload } from 'lucide-react';
 import { ProviderForm, ProviderList } from '@/components/providers';
 import { Pagination, ConfirmDialog, LoadingSpinner, ErrorState, EmptyState } from '@/components/common';
 import {
@@ -17,6 +17,7 @@ import {
   useUpdateProvider,
   useDeleteProvider,
 } from '@/lib/hooks';
+import { exportProviders, importProviders } from '@/lib/api';
 import { Provider, ProviderCreate, ProviderUpdate } from '@/types';
 
 /**
@@ -45,6 +46,9 @@ export default function ProvidersPage() {
   const createMutation = useCreateProvider();
   const updateMutation = useUpdateProvider();
   const deleteMutation = useDeleteProvider();
+
+  // File Input Ref
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Open create form
   const handleCreate = () => {
@@ -96,6 +100,48 @@ export default function ProvidersPage() {
     }
   };
 
+  // Export
+  const handleExport = async () => {
+    try {
+      const data = await exportProviders();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `providers_export_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert('Export failed');
+    }
+  };
+
+  // Import
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const json = JSON.parse(text);
+      const result = await importProviders(json);
+      alert(`Import complete.\nSuccess: ${result.success}\nSkipped: ${result.skipped}`);
+      refetch();
+    } catch (error) {
+      console.error('Import failed:', error);
+      alert('Import failed: ' + (error as any).message);
+    }
+    // Reset input
+    event.target.value = '';
+  };
+
   return (
     <div className="space-y-6">
       {/* Page Title and Actions */}
@@ -106,10 +152,27 @@ export default function ProvidersPage() {
             Manage upstream AI provider configurations
           </p>
         </div>
-        <Button onClick={handleCreate}>
-          <Plus className="mr-2 h-4 w-4" suppressHydrationWarning />
-          Add Provider
-        </Button>
+        <div className="flex gap-2">
+          <input
+            type="file"
+            ref={fileInputRef}
+            className="hidden"
+            accept=".json"
+            onChange={handleFileChange}
+          />
+          <Button variant="outline" onClick={handleImportClick}>
+            <Upload className="mr-2 h-4 w-4" />
+            Import
+          </Button>
+          <Button variant="outline" onClick={handleExport}>
+            <Download className="mr-2 h-4 w-4" />
+            Export
+          </Button>
+          <Button onClick={handleCreate}>
+            <Plus className="mr-2 h-4 w-4" suppressHydrationWarning />
+            Add Provider
+          </Button>
+        </div>
       </div>
 
       {/* Data List */}
