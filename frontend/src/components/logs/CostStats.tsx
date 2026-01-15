@@ -112,6 +112,35 @@ function stepLabel(unit: 'hour' | 'day', step: number) {
   return step === 1 ? 'Hour' : `${step}h`;
 }
 
+function hashString(value: string) {
+  let hash = 5381;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash * 33) ^ value.charCodeAt(i);
+  }
+  return hash >>> 0;
+}
+
+const MODEL_COLOR_CLASSES = [
+  'bg-sky-500/80',
+  'bg-emerald-500/80',
+  'bg-indigo-500/80',
+  'bg-cyan-500/80',
+  'bg-violet-500/80',
+  'bg-amber-500/80',
+  'bg-rose-500/80',
+  'bg-teal-500/80',
+  'bg-lime-500/80',
+  'bg-fuchsia-500/80',
+  'bg-orange-500/80',
+  'bg-blue-500/80',
+];
+
+function getModelColorClass(modelName: string) {
+  const key = modelName?.trim() || '-';
+  const idx = hashString(key) % MODEL_COLOR_CLASSES.length;
+  return MODEL_COLOR_CLASSES[idx]!;
+}
+
 function TrendCard({
   title,
   points,
@@ -438,6 +467,14 @@ export function CostStats({
     []
   );
 
+  const modelColorMap = useMemo(() => {
+    const entries = (stats?.by_model ?? []).slice(0, 10).map((m) => {
+      const key = m.requested_model || '-';
+      return [key, getModelColorClass(key)] as const;
+    });
+    return new Map(entries);
+  }, [stats?.by_model]);
+
   return (
     <Card>
       <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -563,16 +600,24 @@ export function CostStats({
                     stats.by_model.slice(0, 10).map((m) => {
                       const widthPct =
                         modelMax > 0 ? Math.max(2, Math.round((m.total_cost / modelMax) * 100)) : 0;
+                      const colorClassName =
+                        modelColorMap.get(m.requested_model || '-') ?? 'bg-primary/70';
                       return (
                         <div key={m.requested_model} className="space-y-1">
                           <div className="flex items-center justify-between gap-2 text-sm">
-                            <span className="truncate" title={m.requested_model}>
-                              {m.requested_model || '-'}
+                            <span className="flex min-w-0 items-center gap-2">
+                              <span
+                                className={`h-2 w-2 shrink-0 rounded-sm ${colorClassName}`}
+                                aria-hidden="true"
+                              />
+                              <span className="truncate" title={m.requested_model}>
+                                {m.requested_model || '-'}
+                              </span>
                             </span>
                             <span className="shrink-0 font-mono text-xs">{formatUsd(m.total_cost)}</span>
                           </div>
                           <div className="h-2 w-full rounded bg-muted">
-                            <div className="h-2 rounded bg-primary/70" style={{ width: `${widthPct}%` }} />
+                            <div className={`h-2 rounded ${colorClassName}`} style={{ width: `${widthPct}%` }} />
                           </div>
                         </div>
                       );
