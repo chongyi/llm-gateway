@@ -17,7 +17,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { RuleBuilder } from '@/components/common';
 import { ModelMapping, ModelMappingCreate, ModelMappingUpdate, RuleSet } from '@/types';
@@ -41,7 +40,6 @@ interface FormData {
   requested_model: string;
   strategy: string;
   matching_rules: RuleSet | null;
-  capabilities: string;
   is_active: boolean;
   input_price: string;
   output_price: string;
@@ -74,7 +72,6 @@ export function ModelForm({
       requested_model: '',
       strategy: 'round_robin',
       matching_rules: null,
-      capabilities: '',
       is_active: true,
       input_price: '',
       output_price: '',
@@ -90,9 +87,6 @@ export function ModelForm({
         requested_model: model.requested_model,
         strategy: model.strategy,
         matching_rules: model.matching_rules || null,
-        capabilities: model.capabilities
-          ? JSON.stringify(model.capabilities, null, 2)
-          : '',
         is_active: model.is_active,
         input_price:
           model.input_price === null || model.input_price === undefined
@@ -108,7 +102,6 @@ export function ModelForm({
         requested_model: '',
         strategy: 'round_robin',
         matching_rules: null,
-        capabilities: '',
         is_active: true,
         input_price: '',
         output_price: '',
@@ -130,14 +123,10 @@ export function ModelForm({
     
     // Assign rules directly
     submitData.matching_rules = data.matching_rules || undefined;
-    
-    // Parse JSON field
-    if (data.capabilities.trim()) {
-      try {
-        submitData.capabilities = JSON.parse(data.capabilities);
-      } catch {
-        // Ignore parse errors
-      }
+
+    // Preserve existing capabilities on edit (field hidden in UI)
+    if (isEdit && model?.capabilities) {
+      submitData.capabilities = model.capabilities;
     }
 
     const inputPrice = data.input_price.trim();
@@ -146,17 +135,6 @@ export function ModelForm({
     submitData.output_price = outputPrice ? Number(outputPrice) : null;
     
     onSubmit(submitData);
-  };
-
-  // Validate JSON format
-  const validateJson = (value: string) => {
-    if (!value.trim()) return true;
-    try {
-      JSON.parse(value);
-      return true;
-    } catch {
-      return 'Please enter valid JSON format';
-    }
   };
 
   return (
@@ -222,26 +200,6 @@ export function ModelForm({
                 />
               )}
             />
-          </div>
-
-          {/* Capabilities Description */}
-          <div className="space-y-2">
-            <Label htmlFor="capabilities">
-              Capabilities Description <span className="text-muted-foreground">(JSON, Optional)</span>
-            </Label>
-            <Textarea
-              id="capabilities"
-              placeholder='{"streaming": true, "function_calling": true}'
-              rows={3}
-              {...register('capabilities', {
-                validate: validateJson,
-              })}
-            />
-            {errors.capabilities && (
-              <p className="text-sm text-destructive">
-                {errors.capabilities.message}
-              </p>
-            )}
           </div>
 
           {/* Status */}
