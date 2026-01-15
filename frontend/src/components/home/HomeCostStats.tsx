@@ -16,7 +16,7 @@ import { Label } from '@/components/ui/label';
 type RangePreset = '24h' | '7d' | '30d' | '90d' | '365d' | 'custom';
 
 const STORAGE_KEY = 'home_cost_stats_range_v1';
-const DEFAULT_PRESET: RangePreset = '7d';
+const DEFAULT_PRESET: RangePreset = '24h';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function formatDateInputValue(date: Date) {
@@ -147,7 +147,6 @@ export function HomeCostStats() {
       toolbar={
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <div className="flex items-center gap-2">
-            <Label className="text-xs text-muted-foreground">Range</Label>
             <Select
               value={preset}
               onValueChange={(v) => setRangeState((s) => ({ ...s, preset: v as RangePreset }))}
