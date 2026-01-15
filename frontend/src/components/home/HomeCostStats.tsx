@@ -164,11 +164,11 @@ export function HomeCostStats() {
           {preset === 'custom' ? (
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <div className="flex items-center gap-2">
-                <Label className="text-xs text-muted-foreground">From</Label>
                 <Input
                   className="h-8 w-[140px]"
                   type="date"
                   value={customStart}
+                  aria-label="Start date"
                   onChange={(e) => {
                     const nextStart = e.target.value;
                     if (!nextStart) return;
@@ -181,11 +181,11 @@ export function HomeCostStats() {
                 />
               </div>
               <div className="flex items-center gap-2">
-                <Label className="text-xs text-muted-foreground">To</Label>
                 <Input
                   className="h-8 w-[140px]"
                   type="date"
                   value={customEnd}
+                  aria-label="End date"
                   onChange={(e) => {
                     const nextEnd = e.target.value;
                     if (!nextEnd) return;

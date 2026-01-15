@@ -36,7 +36,7 @@ export function CostStats({ stats, loading, onRefresh, refreshing, toolbar }: Co
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
-          <CardTitle className="shrink-0">Cost Stats</CardTitle>
+          <CardTitle className="shrink-0">Activity</CardTitle>
           {toolbar ? <div className="min-w-0">{toolbar}</div> : null}
         </div>
         {onRefresh ? (
@@ -44,7 +44,7 @@ export function CostStats({ stats, loading, onRefresh, refreshing, toolbar }: Co
             type="button"
             variant="ghost"
             size="icon"
-            aria-label="Refresh cost stats"
+            aria-label="Refresh activity"
             onClick={onRefresh}
             disabled={refreshing}
           >
