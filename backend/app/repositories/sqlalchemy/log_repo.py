@@ -7,7 +7,7 @@ Provides concrete database operation implementation for request logs.
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from sqlalchemy import func, select, and_, or_, delete
+from sqlalchemy import func, select, and_, or_, delete, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import RequestLog as RequestLogORM
@@ -263,6 +263,12 @@ class SQLAlchemyLogRepository(LogRepository):
         sum_in_tokens = func.coalesce(func.sum(RequestLogORM.input_tokens), 0)
         sum_out_tokens = func.coalesce(func.sum(RequestLogORM.output_tokens), 0)
 
+        error_condition = or_(
+            RequestLogORM.error_info.isnot(None),
+            RequestLogORM.response_status >= 400,
+        )
+        sum_error = func.coalesce(func.sum(case((error_condition, 1), else_=0)), 0)
+
         summary_stmt = select(
             func.count().label("request_count"),
             sum_total.label("total_cost"),
@@ -308,6 +314,11 @@ class SQLAlchemyLogRepository(LogRepository):
             bucket_expr.label("bucket"),
             func.count().label("request_count"),
             sum_total.label("total_cost"),
+            sum_input.label("input_cost"),
+            sum_output.label("output_cost"),
+            sum_in_tokens.label("input_tokens"),
+            sum_out_tokens.label("output_tokens"),
+            sum_error.label("error_count"),
         ).group_by(bucket_expr).order_by(bucket_expr)
         if where_clause is not None:
             trend_stmt = trend_stmt.where(where_clause)
@@ -317,6 +328,15 @@ class SQLAlchemyLogRepository(LogRepository):
                 bucket=str(r["bucket"]),
                 request_count=int(r["request_count"] or 0),
                 total_cost=float(r["total_cost"] or 0),
+                input_cost=float(r["input_cost"] or 0),
+                output_cost=float(r["output_cost"] or 0),
+                input_tokens=int(r["input_tokens"] or 0),
+                output_tokens=int(r["output_tokens"] or 0),
+                error_count=int(r["error_count"] or 0),
+                success_count=max(
+                    0,
+                    int(r["request_count"] or 0) - int(r["error_count"] or 0),
+                ),
             )
             for r in trend_rows
         ]

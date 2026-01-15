@@ -11,7 +11,8 @@ import { LoadingSpinner } from '@/components/common';
 import { LogCostStatsResponse } from '@/types';
 import { formatNumber, formatUsd } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { RefreshCw } from 'lucide-react';
+import Link from 'next/link';
+import { Maximize2, RefreshCw } from 'lucide-react';
 
 interface CostStatsProps {
   stats?: LogCostStatsResponse;
@@ -20,6 +21,123 @@ interface CostStatsProps {
   refreshing?: boolean;
   headerActions?: React.ReactNode;
   headerExtras?: React.ReactNode;
+  rangeLabel?: string;
+  rangeDays?: number;
+}
+
+type Segment = {
+  label: string;
+  colorClassName: string;
+  getValue: (p: LogCostStatsResponse['trend'][number]) => number;
+  formatValue: (v: number) => string;
+};
+
+function formatCompactNumber(value: number) {
+  if (!Number.isFinite(value)) return '0';
+  if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1)}B`;
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+  return String(Math.round(value));
+}
+
+function TrendCard({
+  title,
+  href,
+  points,
+  segments,
+  avgLabel,
+  avgValue,
+  totalLabel,
+  totalValue,
+}: {
+  title: string;
+  href?: string;
+  points: LogCostStatsResponse['trend'];
+  segments: Segment[];
+  avgLabel: string;
+  avgValue: string;
+  totalLabel: string;
+  totalValue: string;
+}) {
+  const maxTotal = useMemo(() => {
+    const totals = points.map((p) =>
+      segments.reduce((acc, seg) => acc + (Number(seg.getValue(p)) || 0), 0)
+    );
+    return Math.max(0, ...totals);
+  }, [points, segments]);
+
+  return (
+    <div className="group relative overflow-hidden rounded-2xl border bg-gradient-to-b from-muted/10 to-background p-4">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-sm font-medium text-foreground">{title}</div>
+        </div>
+        {href ? (
+          <Link
+            href={href}
+            className="rounded-md p-1 text-muted-foreground opacity-80 transition hover:bg-muted/20 hover:text-foreground group-hover:opacity-100"
+            aria-label={`Open ${title}`}
+          >
+            <Maximize2 className="h-4 w-4" suppressHydrationWarning />
+          </Link>
+        ) : null}
+      </div>
+
+      <div className="flex items-end gap-1 overflow-x-auto pb-2">
+        {points.length === 0 ? (
+          <div className="text-sm text-muted-foreground">No data</div>
+        ) : (
+          points.map((p) => {
+            const rawValues = segments.map((seg) => Math.max(0, Number(seg.getValue(p)) || 0));
+            const total = rawValues.reduce((acc, v) => acc + v, 0);
+            const totalHeight =
+              maxTotal > 0 ? Math.max(2, Math.round((Math.min(total, maxTotal) / maxTotal) * 96)) : 0;
+
+            const toolLines = [
+              p.bucket,
+              ...segments.map((seg, idx) => `${seg.label}: ${seg.formatValue(rawValues[idx] ?? 0)}`),
+            ];
+
+            return (
+              <div key={p.bucket} className="flex flex-col items-center gap-1">
+                <div
+                  className="flex w-3 flex-col justify-end overflow-hidden rounded-sm bg-muted/15"
+                  style={{ height: 96 }}
+                  title={toolLines.join('\n')}
+                >
+                  <div className="flex flex-col-reverse" style={{ height: totalHeight }}>
+                    {segments.map((seg, idx) => {
+                      const segValue = rawValues[idx] ?? 0;
+                      const height =
+                        total > 0 ? Math.max(1, Math.round((segValue / total) * totalHeight)) : 0;
+                      return (
+                        <div
+                          key={seg.label}
+                          className={seg.colorClassName}
+                          style={{ height }}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      <div className="mt-1 flex items-end justify-between gap-6">
+        <div className="min-w-0">
+          <div className="text-xs text-muted-foreground">{avgLabel}</div>
+          <div className="mt-1 font-mono text-sm font-medium">{avgValue}</div>
+        </div>
+        <div className="min-w-0 text-right">
+          <div className="text-xs text-muted-foreground">{totalLabel}</div>
+          <div className="mt-1 font-mono text-sm font-medium">{totalValue}</div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function CostStats({
@@ -29,16 +147,69 @@ export function CostStats({
   refreshing,
   headerActions,
   headerExtras,
+  rangeLabel = 'Selected Range',
+  rangeDays = 1,
 }: CostStatsProps) {
-  const trendMax = useMemo(() => {
-    const values = stats?.trend?.map((p) => Number(p.total_cost) || 0) ?? [];
-    return Math.max(0, ...values);
-  }, [stats?.trend]);
-
   const modelMax = useMemo(() => {
     const values = stats?.by_model?.map((p) => Number(p.total_cost) || 0) ?? [];
     return Math.max(0, ...values);
   }, [stats?.by_model]);
+
+  const safeRangeDays = Math.max(1, Math.round(rangeDays));
+
+  const spendSegments = useMemo<Segment[]>(
+    () => [
+      {
+        label: 'Input',
+        colorClassName: 'bg-sky-500/80',
+        getValue: (p) => p.input_cost,
+        formatValue: (v) => formatUsd(v),
+      },
+      {
+        label: 'Output',
+        colorClassName: 'bg-emerald-400/80',
+        getValue: (p) => p.output_cost,
+        formatValue: (v) => formatUsd(v),
+      },
+    ],
+    []
+  );
+
+  const tokenSegments = useMemo<Segment[]>(
+    () => [
+      {
+        label: 'Input',
+        colorClassName: 'bg-indigo-500/80',
+        getValue: (p) => p.input_tokens,
+        formatValue: (v) => formatCompactNumber(v),
+      },
+      {
+        label: 'Output',
+        colorClassName: 'bg-cyan-400/80',
+        getValue: (p) => p.output_tokens,
+        formatValue: (v) => formatCompactNumber(v),
+      },
+    ],
+    []
+  );
+
+  const requestSegments = useMemo<Segment[]>(
+    () => [
+      {
+        label: 'Success',
+        colorClassName: 'bg-teal-400/80',
+        getValue: (p) => p.success_count,
+        formatValue: (v) => formatNumber(v),
+      },
+      {
+        label: 'Error',
+        colorClassName: 'bg-rose-500/80',
+        getValue: (p) => p.error_count,
+        formatValue: (v) => formatNumber(v),
+      },
+    ],
+    []
+  );
 
   return (
     <Card>
@@ -80,6 +251,41 @@ export function CostStats({
 
         {!loading && stats && (
           <>
+            <div className="grid gap-4 lg:grid-cols-3">
+              <TrendCard
+                title="Spend"
+                href="/logs"
+                points={stats.trend}
+                segments={spendSegments}
+                avgLabel="Avg Day"
+                avgValue={formatUsd(stats.summary.total_cost / safeRangeDays)}
+                totalLabel={rangeLabel}
+                totalValue={formatUsd(stats.summary.total_cost)}
+              />
+
+              <TrendCard
+                title="Tokens"
+                href="/logs"
+                points={stats.trend}
+                segments={tokenSegments}
+                avgLabel="Avg Day"
+                avgValue={formatCompactNumber((stats.summary.input_tokens + stats.summary.output_tokens) / safeRangeDays)}
+                totalLabel={rangeLabel}
+                totalValue={formatCompactNumber(stats.summary.input_tokens + stats.summary.output_tokens)}
+              />
+
+              <TrendCard
+                title="Requests"
+                href="/logs"
+                points={stats.trend}
+                segments={requestSegments}
+                avgLabel="Avg Day"
+                avgValue={formatNumber(stats.summary.request_count / safeRangeDays)}
+                totalLabel={rangeLabel}
+                totalValue={formatNumber(stats.summary.request_count)}
+              />
+            </div>
+
             <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3 lg:grid-cols-6">
               <div className="rounded-md border bg-muted/30 p-3">
                 <div className="text-muted-foreground">Total</div>
@@ -107,33 +313,7 @@ export function CostStats({
               </div>
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div className="rounded-lg border bg-muted/10 p-3">
-                <div className="mb-2 text-sm font-medium">Cost Trend</div>
-                <div className="flex items-end gap-1 overflow-x-auto pb-1">
-                  {stats.trend.length === 0 ? (
-                    <div className="text-sm text-muted-foreground">No data</div>
-                  ) : (
-                    stats.trend.map((p) => {
-                      const heightPct =
-                        trendMax > 0 ? Math.max(2, Math.round((p.total_cost / trendMax) * 100)) : 0;
-                      return (
-                        <div key={p.bucket} className="flex flex-col items-center gap-1">
-                          <div
-                            className="w-3 rounded-sm bg-primary/70"
-                            style={{ height: `${heightPct}%`, minHeight: 4, maxHeight: 96 }}
-                            title={`${p.bucket}\n${formatUsd(p.total_cost)}\nRequests: ${p.request_count}`}
-                          />
-                          <div className="max-w-[64px] truncate text-[10px] text-muted-foreground" title={p.bucket}>
-                            {p.bucket}
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-
+            <div className="grid gap-4">
               <div className="rounded-lg border bg-muted/10 p-3">
                 <div className="mb-2 text-sm font-medium">By Model (Top 10)</div>
                 <div className="space-y-2">

@@ -93,6 +93,12 @@ export interface LogCostTrendPoint {
   bucket: string;
   request_count: number;
   total_cost: number;
+  input_cost: number;
+  output_cost: number;
+  input_tokens: number;
+  output_tokens: number;
+  error_count: number;
+  success_count: number;
 }
 
 export interface LogCostByModel {

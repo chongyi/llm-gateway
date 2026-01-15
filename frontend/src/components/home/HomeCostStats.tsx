@@ -18,6 +18,25 @@ const STORAGE_KEY = 'home_cost_stats_range_v1';
 const DEFAULT_PRESET: RangePreset = '24h';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+function getRangeLabel(preset: RangePreset) {
+  switch (preset) {
+    case '24h':
+      return 'Past 24 hours';
+    case '7d':
+      return 'Past 7 days';
+    case '30d':
+      return 'Past Month';
+    case '90d':
+      return 'Past 90 days';
+    case '365d':
+      return 'Past Year';
+    case 'custom':
+      return 'Selected Range';
+    default:
+      return 'Selected Range';
+  }
+}
+
 function formatDateInputValue(date: Date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -42,6 +61,13 @@ function startOfDay(date: Date) {
 
 function endOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
+}
+
+function diffDaysInclusive(start: Date, end: Date) {
+  const startAt = startOfDay(start).getTime();
+  const endAt = startOfDay(end).getTime();
+  const days = Math.floor((endAt - startAt) / DAY_MS) + 1;
+  return Math.max(1, days);
 }
 
 function getDefaultRangeState() {
@@ -136,6 +162,21 @@ export function HomeCostStats() {
     return { start_time: start.toISOString(), end_time: endAnchor.toISOString() };
   }, [preset, customStart, customEnd, refreshToken]);
 
+  const rangeDays = useMemo(() => {
+    if (preset === 'custom') {
+      const start = parseDateInputValue(customStart);
+      const end = parseDateInputValue(customEnd);
+      if (!start || !end) return 1;
+      return diffDaysInclusive(start, end);
+    }
+
+    if (preset === '24h') return 1;
+    if (preset === '7d') return 7;
+    if (preset === '30d') return 30;
+    if (preset === '90d') return 90;
+    return 365;
+  }, [preset, customStart, customEnd]);
+
   const { data, isLoading, isFetching, refetch } = useLogCostStats(params);
 
   return (
@@ -143,6 +184,8 @@ export function HomeCostStats() {
       stats={data}
       loading={isLoading}
       refreshing={isFetching}
+      rangeLabel={getRangeLabel(preset)}
+      rangeDays={rangeDays}
       headerActions={
         <div className="flex items-center justify-end">
           <Select
