@@ -7,7 +7,8 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CostStats } from '@/components/logs';
-import { useLogCostStats } from '@/lib/hooks';
+import { useQuery } from '@tanstack/react-query';
+import { getLogCostStats } from '@/lib/api';
 import { LogQueryParams } from '@/types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
@@ -115,7 +116,6 @@ function loadRangeStateFromStorage() {
 
 export function HomeCostStats() {
   const [{ preset, customStart, customEnd }, setRangeState] = useState(getDefaultRangeState);
-  const [refreshToken, setRefreshToken] = useState(0);
   const restoredRef = useRef(false);
 
   useEffect(() => {
@@ -145,48 +145,37 @@ export function HomeCostStats() {
     }
   }, [preset, customStart, customEnd]);
 
-  const params = useMemo<LogQueryParams>(() => {
-    // `refreshToken` nudges the query window forward to "now" for live ranges (e.g. 24h/7d).
-    const endAnchor = new Date();
-    endAnchor.setMilliseconds(endAnchor.getMilliseconds() + refreshToken);
-    const tzOffsetMinutes = -endAnchor.getTimezoneOffset();
+  const customRange = useMemo(() => {
+    if (preset !== 'custom') return null;
+    const start = parseDateInputValue(customStart);
+    const end = parseDateInputValue(customEnd);
+    if (!start || !end) return null;
+    const startAt = startOfDay(start);
+    const endAt = endOfDay(end);
+    return { startAt, endAt };
+  }, [preset, customStart, customEnd]);
 
-    if (preset === 'custom') {
-      const start = parseDateInputValue(customStart);
-      const end = parseDateInputValue(customEnd);
-      if (!start || !end) return {};
-      const startAt = startOfDay(start);
-      const endAt = endOfDay(end);
-      const bucket = resolveBucket(endAt.getTime() - startAt.getTime(), MAX_TREND_BARS);
+  const displayRange = useMemo(() => {
+    const now = new Date();
+    if (preset === 'custom' && customRange) {
+      const bucket = resolveBucket(customRange.endAt.getTime() - customRange.startAt.getTime(), MAX_TREND_BARS);
       return {
-        start_time: startAt.toISOString(),
-        end_time: endAt.toISOString(),
-        tz_offset_minutes: tzOffsetMinutes,
+        start_time: customRange.startAt.toISOString(),
+        end_time: customRange.endAt.toISOString(),
         bucket,
-      };
+      } as const;
     }
 
-    if (preset === '24h') {
-      const start = new Date(endAnchor.getTime() - DAY_MS);
-      const bucket = resolveBucket(endAnchor.getTime() - start.getTime(), MAX_TREND_BARS);
-      return {
-        start_time: start.toISOString(),
-        end_time: endAnchor.toISOString(),
-        tz_offset_minutes: tzOffsetMinutes,
-        bucket,
-      };
-    }
-
-    const days = preset === '7d' ? 7 : preset === '30d' ? 30 : preset === '90d' ? 90 : 365;
-    const start = new Date(endAnchor.getTime() - days * DAY_MS);
-    const bucket = resolveBucket(endAnchor.getTime() - start.getTime(), MAX_TREND_BARS);
+    const days =
+      preset === '24h' ? 1 : preset === '7d' ? 7 : preset === '30d' ? 30 : preset === '90d' ? 90 : 365;
+    const start = new Date(now.getTime() - days * DAY_MS);
+    const bucket = resolveBucket(now.getTime() - start.getTime(), MAX_TREND_BARS);
     return {
       start_time: start.toISOString(),
-      end_time: endAnchor.toISOString(),
-      tz_offset_minutes: tzOffsetMinutes,
+      end_time: now.toISOString(),
       bucket,
-    };
-  }, [preset, customStart, customEnd, refreshToken]);
+    } as const;
+  }, [preset, customRange]);
 
   const rangeDays = useMemo(() => {
     if (preset === 'custom') {
@@ -213,16 +202,46 @@ export function HomeCostStats() {
     return getRangeLabel(preset);
   }, [preset, customStart, customEnd]);
 
-  const { data, isLoading, isFetching, refetch } = useLogCostStats(params);
+  const queryKey = useMemo(
+    () => ['logs', 'home-cost-stats', preset, customStart, customEnd] as const,
+    [preset, customStart, customEnd]
+  );
 
-  useEffect(() => {
-    if (preset === 'custom') return;
-    const id = window.setInterval(() => {
-      if (document.visibilityState !== 'visible') return;
-      setRefreshToken((t) => t + 1);
-    }, 15_000);
-    return () => window.clearInterval(id);
-  }, [preset]);
+  const { data, isLoading, isFetching, refetch } = useQuery({
+    queryKey,
+    enabled: preset !== 'custom' || Boolean(customRange),
+    queryFn: async () => {
+      const now = new Date();
+      const tzOffsetMinutes = -now.getTimezoneOffset();
+
+      if (preset === 'custom' && customRange) {
+        const bucket = resolveBucket(customRange.endAt.getTime() - customRange.startAt.getTime(), MAX_TREND_BARS);
+        const params: LogQueryParams = {
+          start_time: customRange.startAt.toISOString(),
+          end_time: customRange.endAt.toISOString(),
+          tz_offset_minutes: tzOffsetMinutes,
+          bucket,
+        };
+        return getLogCostStats(params);
+      }
+
+      const days =
+        preset === '24h' ? 1 : preset === '7d' ? 7 : preset === '30d' ? 30 : preset === '90d' ? 90 : 365;
+      const start = new Date(now.getTime() - days * DAY_MS);
+      const bucket = resolveBucket(now.getTime() - start.getTime(), MAX_TREND_BARS);
+
+      // For live ranges, omit `end_time` so the server includes the latest logs up to now.
+      const params: LogQueryParams = {
+        start_time: start.toISOString(),
+        tz_offset_minutes: tzOffsetMinutes,
+        bucket,
+      };
+      return getLogCostStats(params);
+    },
+    refetchInterval: preset === 'custom' ? false : 15_000,
+    refetchOnWindowFocus: true,
+    staleTime: 30 * 1000,
+  });
 
   return (
     <CostStats
@@ -231,9 +250,9 @@ export function HomeCostStats() {
       refreshing={isFetching}
       rangeLabel={rangeLabel}
       rangeDays={rangeDays}
-      rangeStart={params.start_time}
-      rangeEnd={params.end_time}
-      bucket={params.bucket}
+      rangeStart={displayRange.start_time}
+      rangeEnd={displayRange.end_time}
+      bucket={displayRange.bucket}
       maxBars={MAX_TREND_BARS}
       headerActions={
         <div className="flex items-center justify-end">
@@ -296,11 +315,7 @@ export function HomeCostStats() {
         ) : null
       }
       onRefresh={() => {
-        if (preset === 'custom') {
-          void refetch();
-          return;
-        }
-        setRefreshToken((v) => v + 1);
+        void refetch();
       }}
     />
   );
