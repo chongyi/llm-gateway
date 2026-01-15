@@ -5,14 +5,14 @@
 
 'use client';
 
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { LoadingSpinner } from '@/components/common';
 import { LogCostStatsResponse } from '@/types';
 import { formatNumber, formatUsd } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import Link from 'next/link';
 import { Maximize2, RefreshCw } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 
 interface CostStatsProps {
   stats?: LogCostStatsResponse;
@@ -113,7 +113,6 @@ function stepLabel(unit: 'hour' | 'day', step: number) {
 
 function TrendCard({
   title,
-  href,
   points,
   segments,
   avgLabel,
@@ -122,7 +121,6 @@ function TrendCard({
   totalValue,
 }: {
   title: string;
-  href?: string;
   points: LogCostStatsResponse['trend'];
   segments: Segment[];
   avgLabel: string;
@@ -130,7 +128,9 @@ function TrendCard({
   totalLabel: string;
   totalValue: string;
 }) {
+  const [open, setOpen] = useState(false);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const modalScrollerRef = useRef<HTMLDivElement | null>(null);
   const maxTotal = useMemo(() => {
     const totals = points.map((p) =>
       segments.reduce((acc, seg) => acc + (Number(seg.getValue(p)) || 0), 0)
@@ -148,72 +148,96 @@ function TrendCard({
     return () => cancelAnimationFrame(raf);
   }, [points]);
 
+  useEffect(() => {
+    if (!open) return;
+    const el = modalScrollerRef.current;
+    if (!el) return;
+
+    const raf = requestAnimationFrame(() => {
+      el.scrollLeft = el.scrollWidth;
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [open, points]);
+
+  const Bars = ({
+    height,
+    barWidthClassName,
+    scroller,
+  }: {
+    height: number;
+    barWidthClassName: string;
+    scroller?: React.RefObject<HTMLDivElement | null>;
+  }) => (
+    <div ref={scroller} className="flex items-end gap-1 overflow-x-auto pb-2">
+      {points.length === 0 ? (
+        <div className="text-sm text-muted-foreground">No data</div>
+      ) : (
+        points.map((p) => {
+          const rawValues = segments.map((seg) => Math.max(0, Number(seg.getValue(p)) || 0));
+          const total = rawValues.reduce((acc, v) => acc + v, 0);
+          const normalizedMax = maxTotal > 0 ? maxTotal : 1;
+          const totalHeight = Math.max(
+            2,
+            Math.round((Math.min(total, normalizedMax) / normalizedMax) * height)
+          );
+
+          const toolLines = [
+            p.bucket,
+            ...segments.map((seg, idx) => `${seg.label}: ${seg.formatValue(rawValues[idx] ?? 0)}`),
+          ];
+
+          return (
+            <div key={p.bucket} className="flex flex-col items-center gap-1">
+              <div
+                className={`flex ${barWidthClassName} flex-col justify-end overflow-hidden rounded-sm bg-muted/15`}
+                style={{ height }}
+                title={toolLines.join('\n')}
+              >
+                {total > 0 ? (
+                  <div className="flex flex-col-reverse" style={{ height: totalHeight }}>
+                    {segments.map((seg, idx) => {
+                      const segValue = rawValues[idx] ?? 0;
+                      const segHeight =
+                        total > 0 ? Math.max(1, Math.round((segValue / total) * totalHeight)) : 0;
+                      return (
+                        <div
+                          key={seg.label}
+                          className={seg.colorClassName}
+                          style={{ height: segHeight }}
+                        />
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="h-px w-full bg-muted-foreground/30" />
+                )}
+              </div>
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+
   return (
-    <div className="group relative overflow-hidden rounded-2xl border bg-gradient-to-b from-muted/10 to-background p-4">
+    <Dialog open={open} onOpenChange={setOpen}>
+      <div className="group relative overflow-hidden rounded-2xl border bg-gradient-to-b from-muted/10 to-background p-4">
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-sm font-medium text-foreground">{title}</div>
         </div>
-        {href ? (
-          <Link
-            href={href}
+        <DialogTrigger asChild>
+          <button
+            type="button"
             className="rounded-md p-1 text-muted-foreground opacity-80 transition hover:bg-muted/20 hover:text-foreground group-hover:opacity-100"
-            aria-label={`Open ${title}`}
+            aria-label={`Maximize ${title}`}
           >
             <Maximize2 className="h-4 w-4" suppressHydrationWarning />
-          </Link>
-        ) : null}
+          </button>
+        </DialogTrigger>
       </div>
 
-      <div ref={scrollerRef} className="flex items-end gap-1 overflow-x-auto pb-2">
-        {points.length === 0 ? (
-          <div className="text-sm text-muted-foreground">No data</div>
-        ) : (
-          points.map((p) => {
-            const rawValues = segments.map((seg) => Math.max(0, Number(seg.getValue(p)) || 0));
-            const total = rawValues.reduce((acc, v) => acc + v, 0);
-            const normalizedMax = maxTotal > 0 ? maxTotal : 1;
-            const totalHeight = Math.max(
-              2,
-              Math.round((Math.min(total, normalizedMax) / normalizedMax) * 96)
-            );
-
-            const toolLines = [
-              p.bucket,
-              ...segments.map((seg, idx) => `${seg.label}: ${seg.formatValue(rawValues[idx] ?? 0)}`),
-            ];
-
-            return (
-              <div key={p.bucket} className="flex flex-col items-center gap-1">
-                <div
-                  className="flex w-3 flex-col justify-end overflow-hidden rounded-sm bg-muted/15"
-                  style={{ height: 96 }}
-                  title={toolLines.join('\n')}
-                >
-                  {total > 0 ? (
-                    <div className="flex flex-col-reverse" style={{ height: totalHeight }}>
-                      {segments.map((seg, idx) => {
-                        const segValue = rawValues[idx] ?? 0;
-                        const height =
-                          total > 0 ? Math.max(1, Math.round((segValue / total) * totalHeight)) : 0;
-                        return (
-                          <div
-                            key={seg.label}
-                            className={seg.colorClassName}
-                            style={{ height }}
-                          />
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="h-px w-full bg-muted-foreground/30" />
-                  )}
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
+      <Bars height={96} barWidthClassName="w-3" scroller={scrollerRef} />
 
       <div className="mt-1 flex items-end justify-between gap-6">
         <div className="min-w-0">
@@ -226,6 +250,28 @@ function TrendCard({
         </div>
       </div>
     </div>
+
+      <DialogContent className="max-w-5xl p-0">
+        <div className="rounded-lg border bg-background p-6">
+          <DialogHeader className="mb-2">
+            <DialogTitle>{title}</DialogTitle>
+          </DialogHeader>
+
+          <Bars height={220} barWidthClassName="w-4" scroller={modalScrollerRef} />
+
+          <div className="mt-2 flex items-end justify-between gap-6">
+            <div className="min-w-0">
+              <div className="text-sm text-muted-foreground">{avgLabel}</div>
+              <div className="mt-1 font-mono text-base font-medium">{avgValue}</div>
+            </div>
+            <div className="min-w-0 text-right">
+              <div className="text-sm text-muted-foreground">{totalLabel}</div>
+              <div className="mt-1 font-mono text-base font-medium">{totalValue}</div>
+            </div>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -418,7 +464,6 @@ export function CostStats({
             <div className="grid gap-4 lg:grid-cols-3">
               <TrendCard
                 title="Spend"
-                href="/logs"
                 points={computedTrend}
                 segments={spendSegments}
                 avgLabel={avgTrendLabel}
@@ -433,7 +478,6 @@ export function CostStats({
 
               <TrendCard
                 title="Tokens"
-                href="/logs"
                 points={computedTrend}
                 segments={tokenSegments}
                 avgLabel={avgTrendLabel}
@@ -452,7 +496,6 @@ export function CostStats({
 
               <TrendCard
                 title="Requests"
-                href="/logs"
                 points={computedTrend}
                 segments={requestSegments}
                 avgLabel={avgTrendLabel}
