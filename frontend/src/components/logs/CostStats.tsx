@@ -13,6 +13,7 @@ import { formatNumber, formatUsd } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Maximize2, RefreshCw } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface CostStatsProps {
   stats?: LogCostStatsResponse;
@@ -168,55 +169,71 @@ function TrendCard({
     barWidthClassName: string;
     scroller?: React.RefObject<HTMLDivElement | null>;
   }) => (
-    <div ref={scroller} className="flex items-end gap-1 overflow-x-auto pb-2">
-      {points.length === 0 ? (
-        <div className="text-sm text-muted-foreground">No data</div>
-      ) : (
-        points.map((p) => {
-          const rawValues = segments.map((seg) => Math.max(0, Number(seg.getValue(p)) || 0));
-          const total = rawValues.reduce((acc, v) => acc + v, 0);
-          const normalizedMax = maxTotal > 0 ? maxTotal : 1;
-          const totalHeight = Math.max(
-            2,
-            Math.round((Math.min(total, normalizedMax) / normalizedMax) * height)
-          );
+    <TooltipProvider delayDuration={0} skipDelayDuration={0}>
+      <div ref={scroller} className="flex items-end gap-1 overflow-x-auto pb-2">
+        {points.length === 0 ? (
+          <div className="text-sm text-muted-foreground">No data</div>
+        ) : (
+          points.map((p) => {
+            const rawValues = segments.map((seg) => Math.max(0, Number(seg.getValue(p)) || 0));
+            const total = rawValues.reduce((acc, v) => acc + v, 0);
+            const normalizedMax = maxTotal > 0 ? maxTotal : 1;
+            const totalHeight = Math.max(
+              2,
+              Math.round((Math.min(total, normalizedMax) / normalizedMax) * height)
+            );
 
-          const toolLines = [
-            p.bucket,
-            ...segments.map((seg, idx) => `${seg.label}: ${seg.formatValue(rawValues[idx] ?? 0)}`),
-          ];
-
-          return (
-            <div key={p.bucket} className="flex flex-col items-center gap-1">
-              <div
-                className={`flex ${barWidthClassName} flex-col justify-end overflow-hidden rounded-sm bg-muted/15`}
-                style={{ height }}
-                title={toolLines.join('\n')}
-              >
-                {total > 0 ? (
-                  <div className="flex flex-col-reverse" style={{ height: totalHeight }}>
-                    {segments.map((seg, idx) => {
-                      const segValue = rawValues[idx] ?? 0;
-                      const segHeight =
-                        total > 0 ? Math.max(1, Math.round((segValue / total) * totalHeight)) : 0;
-                      return (
-                        <div
-                          key={seg.label}
-                          className={seg.colorClassName}
-                          style={{ height: segHeight }}
-                        />
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="h-px w-full bg-muted-foreground/30" />
-                )}
+            return (
+              <div key={p.bucket} className="flex flex-col items-center gap-1">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      className={`flex ${barWidthClassName} flex-col justify-end overflow-hidden rounded-sm bg-muted/15 p-0 outline-none ring-offset-background transition focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}
+                      style={{ height }}
+                      aria-label={`Show details for ${title} at ${p.bucket}`}
+                    >
+                      {total > 0 ? (
+                        <div className="flex flex-col-reverse" style={{ height: totalHeight }}>
+                          {segments.map((seg, idx) => {
+                            const segValue = rawValues[idx] ?? 0;
+                            const segHeight =
+                              total > 0 ? Math.max(1, Math.round((segValue / total) * totalHeight)) : 0;
+                            return (
+                              <div
+                                key={seg.label}
+                                className={seg.colorClassName}
+                                style={{ height: segHeight }}
+                              />
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="h-px w-full bg-muted-foreground/30" />
+                      )}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" align="center" className="min-w-[220px]">
+                    <div className="text-xs font-medium">{p.bucket}</div>
+                    <div className="mt-2 space-y-1 text-xs">
+                      {segments.map((seg, idx) => (
+                        <div key={seg.label} className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2">
+                            <span className={`h-2 w-2 rounded-sm ${seg.colorClassName}`} />
+                            <span className="text-muted-foreground">{seg.label}</span>
+                          </div>
+                          <span className="font-mono">{seg.formatValue(rawValues[idx] ?? 0)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
               </div>
-            </div>
-          );
-        })
-      )}
-    </div>
+            );
+          })
+        )}
+      </div>
+    </TooltipProvider>
   );
 
   return (
