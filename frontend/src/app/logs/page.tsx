@@ -94,7 +94,7 @@ export default function LogsPage() {
     <div className="space-y-6">
       {/* Page Title */}
       <div>
-        <h1 className="text-2xl font-bold">Request Logs</h1>
+        <h1 className="text-2xl font-bold">Logs</h1>
         <p className="mt-1 text-muted-foreground">
           View proxy request logs, supports multi-condition filtering
         </p>

@@ -14,7 +14,7 @@ import {
   Key,
   FileText,
   Home,
-  Settings,
+  Squirrel,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
@@ -44,7 +44,7 @@ const navItems = [
     icon: Key,
   },
   {
-    title: 'Request Logs',
+    title: 'Logs',
     href: '/logs',
     icon: FileText,
   },
@@ -86,7 +86,7 @@ export function Sidebar() {
         )}
       >
         <div className={cn('flex items-center', collapsed ? 'gap-0' : 'gap-3')}>
-          <Settings
+          <Squirrel
             className="h-6 w-6 text-primary"
             suppressHydrationWarning
           />
@@ -98,7 +98,7 @@ export function Sidebar() {
                 : 'max-w-[160px] opacity-100 translate-x-0'
             )}
           >
-            LLM Gateway
+            Squirrel
           </span>
         </div>
 
@@ -167,7 +167,7 @@ export function Sidebar() {
             collapsed ? 'max-w-0 opacity-0' : 'max-w-[200px] opacity-100'
           )}
         >
-          LLM Gateway v1.0.0
+          Squirrel LLM Gateway v1.0.0
         </p>
       </div>
     </div>
