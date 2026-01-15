@@ -8,9 +8,9 @@
 import React, { useState, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { LogFilters, LogList, CostStats } from '@/components/logs';
+import { LogFilters, LogList } from '@/components/logs';
 import { Pagination, LoadingSpinner, ErrorState, EmptyState } from '@/components/common';
-import { useApiKeys, useLogCostStats, useLogs, useModels, useProviders } from '@/lib/hooks';
+import { useApiKeys, useLogs, useModels, useProviders } from '@/lib/hooks';
 import { LogQueryParams, RequestLog } from '@/types';
 import { RefreshCw } from 'lucide-react';
 
@@ -34,25 +34,6 @@ export default function LogsPage() {
   const { data: providersData } = useProviders({ is_active: true });
   const { data: modelsData } = useModels({ is_active: true, page: 1, page_size: 1000 });
   const { data: apiKeysData } = useApiKeys({ is_active: true, page: 1, page_size: 1000 });
-
-  const statsParams: LogQueryParams = {
-    start_time: filters.start_time,
-    end_time: filters.end_time,
-    requested_model: filters.requested_model,
-    provider_id: filters.provider_id,
-    api_key_id: filters.api_key_id,
-    api_key_name: filters.api_key_name,
-  };
-  const {
-    data: statsData,
-    isLoading: statsLoading,
-    refetch: refetchStats,
-  } = useLogCostStats(statsParams);
-
-  const refetchAll = useCallback(() => {
-    void refetch();
-    void refetchStats();
-  }, [refetch, refetchStats]);
 
   const areLogQueryParamsEqual = useCallback((a: LogQueryParams, b: LogQueryParams) => {
     const keys: Array<keyof LogQueryParams> = [
@@ -96,12 +77,12 @@ export default function LogsPage() {
     setFilters((prev) => {
       const next = { ...prev, ...newFilters, page: 1 };
       if (areLogQueryParamsEqual(prev, next)) {
-        refetchAll();
+        void refetch();
         return prev;
       }
       return next;
     }); // Reset to page 1 on filter change
-  }, [areLogQueryParamsEqual, refetchAll]);
+  }, [areLogQueryParamsEqual, refetch]);
 
   // View Log Detail
   const handleViewLog = useCallback((log: RequestLog) => {
@@ -127,8 +108,6 @@ export default function LogsPage() {
         apiKeys={apiKeysData?.items || []}
       />
 
-      <CostStats stats={statsData} loading={statsLoading} />
-
       {/* Data List */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
@@ -138,7 +117,7 @@ export default function LogsPage() {
             variant="ghost"
             size="icon"
             aria-label="Refresh log list"
-            onClick={refetchAll}
+            onClick={() => refetch()}
             disabled={isLoading}
           >
             <RefreshCw

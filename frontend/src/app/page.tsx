@@ -6,6 +6,7 @@
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Server, Layers, Key, FileText, ArrowRight } from 'lucide-react';
+import { HomeCostStats } from '@/components/home/HomeCostStats';
 
 /** Feature Card Data */
 const features = [
@@ -77,6 +78,8 @@ export default function HomePage() {
           );
         })}
       </div>
+
+      <HomeCostStats />
 
       {/* System Description */}
       <Card>
