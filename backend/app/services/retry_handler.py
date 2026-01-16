@@ -6,15 +6,30 @@ Implements logic for request retry and provider failover.
 
 import asyncio
 import logging
+from datetime import datetime
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, Awaitable
 
 from app.config import get_settings
+from app.common.time import utc_now
 from app.providers.base import ProviderResponse
 from app.rules.models import CandidateProvider
 from app.services.strategy import SelectionStrategy
 
 logger = logging.getLogger(__name__)
+
+@dataclass
+class AttemptRecord:
+    """
+    Attempt Record
+
+    Stores per-attempt information so callers can persist logs for failures/retries.
+    """
+
+    provider: CandidateProvider
+    response: ProviderResponse
+    request_time: datetime
+    attempt_index: int
 
 
 @dataclass
@@ -33,6 +48,8 @@ class RetryResult:
     final_provider: CandidateProvider
     # Success Status
     success: bool
+    # All attempts in order (including final)
+    attempts: list[AttemptRecord]
 
 
 class RetryHandler:
@@ -64,6 +81,8 @@ class RetryHandler:
         candidates: list[CandidateProvider],
         requested_model: str,
         forward_fn: Callable[[CandidateProvider], Any],
+        *,
+        on_failure_attempt: Callable[[AttemptRecord], Awaitable[None]] | None = None,
     ) -> RetryResult:
         """
         Execute Request with Retry
@@ -85,6 +104,7 @@ class RetryHandler:
                 retry_count=0,
                 final_provider=None,  # type: ignore
                 success=False,
+                attempts=[],
             )
         
         # Track tried providers
@@ -92,6 +112,8 @@ class RetryHandler:
         total_retry_count = 0
         last_response: Optional[ProviderResponse] = None
         last_provider: Optional[CandidateProvider] = None
+        attempts: list[AttemptRecord] = []
+        attempt_index = 0
         
         # Select the first provider
         current_provider = await self.strategy.select(candidates, requested_model)
@@ -106,8 +128,17 @@ class RetryHandler:
             
             while same_provider_retries < self.max_retries:
                 # Execute request
+                attempt_time = utc_now()
                 response = await forward_fn(current_provider)
                 last_response = response
+                attempt_record = AttemptRecord(
+                    provider=current_provider,
+                    response=response,
+                    request_time=attempt_time,
+                    attempt_index=attempt_index,
+                )
+                attempts.append(attempt_record)
+                attempt_index += 1
 
                 # Success response
                 if response.is_success:
@@ -116,7 +147,18 @@ class RetryHandler:
                         retry_count=total_retry_count,
                         final_provider=current_provider,
                         success=True,
+                        attempts=attempts,
                     )
+
+                if on_failure_attempt is not None:
+                    try:
+                        await on_failure_attempt(attempt_record)
+                    except Exception:
+                        logger.exception(
+                            "on_failure_attempt callback failed: provider_id=%s attempt_index=%s",
+                            current_provider.provider_id,
+                            attempt_record.attempt_index,
+                        )
 
                 # Log failure
                 logger.warning(
@@ -179,6 +221,7 @@ class RetryHandler:
             retry_count=total_retry_count,
             final_provider=last_provider,  # type: ignore
             success=False,
+            attempts=attempts,
         )
 
     async def execute_with_retry_stream(
@@ -186,6 +229,8 @@ class RetryHandler:
         candidates: list[CandidateProvider],
         requested_model: str,
         forward_stream_fn: Callable[[CandidateProvider], Any],
+        *,
+        on_failure_attempt: Callable[[AttemptRecord], Awaitable[None]] | None = None,
     ) -> Any:
         """
         Execute Streaming Request with Retry
@@ -210,22 +255,32 @@ class RetryHandler:
         last_chunk: bytes = b""
         last_response: Optional[ProviderResponse] = None
         last_provider: Optional[CandidateProvider] = None
-        
+        attempt_index = 0
+
         current_provider = await self.strategy.select(candidates, requested_model)
         
         while current_provider is not None:
             tried_providers.add(current_provider.provider_id)
             last_provider = current_provider
             same_provider_retries = 0
+            pending_attempt_record: Optional[AttemptRecord] = None
             
             while same_provider_retries < self.max_retries:
                 try:
                     # Get generator
+                    attempt_time = utc_now()
                     generator = forward_stream_fn(current_provider)
                     # Get first chunk
                     chunk, response = await anext(generator)
                     last_response = response
                     last_chunk = chunk
+                    attempt_record = AttemptRecord(
+                        provider=current_provider,
+                        response=response,
+                        request_time=attempt_time,
+                        attempt_index=attempt_index,
+                    )
+                    attempt_index += 1
 
                     if response.is_success:
                         # Success, yield subsequent data
@@ -233,6 +288,16 @@ class RetryHandler:
                         async for chunk, response in generator:
                             yield chunk, response, current_provider, total_retry_count
                         return
+
+                    if on_failure_attempt is not None:
+                        try:
+                            await on_failure_attempt(attempt_record)
+                        except Exception:
+                            logger.exception(
+                                "on_failure_attempt callback failed (stream): provider_id=%s attempt_index=%s",
+                                current_provider.provider_id,
+                                attempt_record.attempt_index,
+                            )
 
                     # Log failure
                     logger.warning(
@@ -260,6 +325,7 @@ class RetryHandler:
                                 current_provider.provider_id,
                                 current_provider.provider_name,
                             )
+                            pending_attempt_record = attempt_record
                             break
                     else:
                         logger.warning(
@@ -269,10 +335,28 @@ class RetryHandler:
                             response.status_code,
                         )
                         total_retry_count += 1
+                        pending_attempt_record = attempt_record
                         break
 
                 except Exception as e:
                     # Network or other exceptions
+                    attempt_time = utc_now()
+                    attempt_record = AttemptRecord(
+                        provider=current_provider,
+                        response=ProviderResponse(status_code=502, error=str(e)),
+                        request_time=attempt_time,
+                        attempt_index=attempt_index,
+                    )
+                    attempt_index += 1
+                    if on_failure_attempt is not None:
+                        try:
+                            await on_failure_attempt(attempt_record)
+                        except Exception:
+                            logger.exception(
+                                "on_failure_attempt callback failed (stream exception): provider_id=%s attempt_index=%s",
+                                current_provider.provider_id,
+                                attempt_record.attempt_index,
+                            )
                     logger.warning(
                         "Exception during stream request: provider_id=%s, provider_name=%s, protocol=%s, "
                         "exception=%s, retry_attempt=%s/%s",
@@ -294,6 +378,7 @@ class RetryHandler:
                             current_provider.provider_id,
                             current_provider.provider_name,
                         )
+                        pending_attempt_record = attempt_record
                         break
             
             next_provider = await self._get_next_untried_provider(

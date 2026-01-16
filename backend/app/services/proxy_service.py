@@ -32,7 +32,7 @@ from app.repositories.model_repo import ModelRepository
 from app.repositories.provider_repo import ProviderRepository
 from app.repositories.log_repo import LogRepository
 from app.rules import RuleEngine, RuleContext, TokenUsage, CandidateProvider
-from app.services.retry_handler import RetryHandler
+from app.services.retry_handler import RetryHandler, AttemptRecord
 from app.services.strategy import RoundRobinStrategy, SelectionStrategy
 
 logger = logging.getLogger(__name__)
@@ -76,6 +76,16 @@ class ProxyService:
         self.rule_engine = RuleEngine()
         self.strategy = strategy or RoundRobinStrategy()
         self.retry_handler = RetryHandler(self.strategy)
+
+    @staticmethod
+    def _serialize_response_body(body: Any) -> str | None:
+        if body is None:
+            return None
+        if isinstance(body, (dict, list)):
+            return json.dumps(body, ensure_ascii=False)
+        if isinstance(body, (bytes, bytearray)):
+            return body.decode("utf-8", errors="ignore")
+        return str(body)
 
     async def _resolve_candidates(
         self,
@@ -219,6 +229,54 @@ class ProxyService:
         ]
         logger.debug(f"Matched Providers: {json.dumps(candidates_info, ensure_ascii=False)}")
         
+        failed_attempt_logged = False
+
+        async def log_failed_attempt(attempt: AttemptRecord) -> None:
+            nonlocal failed_attempt_logged
+            provider_mapping = provider_mapping_by_id.get(attempt.provider.provider_id)
+            resolved_price = resolve_price(
+                model_input_price=model_mapping.input_price,
+                model_output_price=model_mapping.output_price,
+                provider_input_price=provider_mapping.input_price if provider_mapping else None,
+                provider_output_price=provider_mapping.output_price if provider_mapping else None,
+            )
+            attempt_log = RequestLogCreate(
+                request_time=attempt.request_time,
+                api_key_id=api_key_id,
+                api_key_name=api_key_name,
+                requested_model=requested_model,
+                target_model=attempt.provider.target_model,
+                provider_id=attempt.provider.provider_id,
+                provider_name=attempt.provider.provider_name,
+                retry_count=attempt.attempt_index + 1,
+                matched_provider_count=len(candidates),
+                first_byte_delay_ms=attempt.response.first_byte_delay_ms,
+                total_time_ms=attempt.response.total_time_ms,
+                input_tokens=input_tokens,
+                output_tokens=None,
+                total_cost=None,
+                input_cost=None,
+                output_cost=None,
+                price_source=resolved_price.price_source,
+                request_headers=sanitize_headers(headers),
+                request_body=body,
+                response_status=attempt.response.status_code,
+                response_body=self._serialize_response_body(attempt.response.body),
+                error_info=attempt.response.error,
+                trace_id=trace_id,
+                is_stream=False,
+            )
+            try:
+                await self.log_repo.create(attempt_log)
+                failed_attempt_logged = True
+            except Exception:
+                logger.exception(
+                    "Failed to write attempt log: trace_id=%s provider_id=%s attempt_index=%s",
+                    trace_id,
+                    attempt.provider.provider_id,
+                    attempt.attempt_index,
+                )
+
         # 8. Execute request (with retry)
         async def forward_fn(candidate: CandidateProvider) -> ProviderResponse:
             try:
@@ -259,6 +317,7 @@ class ProxyService:
             candidates=candidates,
             requested_model=requested_model,
             forward_fn=forward_fn,
+            on_failure_attempt=log_failed_attempt,
         )
 
         if result.response.body is not None and result.final_provider is not None:
@@ -343,17 +402,7 @@ class ProxyService:
             request_body=body,
 
             response_status=result.response.status_code,
-            response_body=(
-                json.dumps(result.response.body, ensure_ascii=False)
-                if isinstance(result.response.body, (dict, list))
-                else (
-                    result.response.body.decode("utf-8", errors="ignore")
-                    if isinstance(result.response.body, (bytes, bytearray))
-                    else result.response.body
-                )
-            )
-            if result.response.body is not None
-            else None,
+            response_body=self._serialize_response_body(result.response.body),
             error_info=result.response.error,
             trace_id=trace_id,
             is_stream=False,
@@ -366,7 +415,8 @@ class ProxyService:
             # Fallback for Pydantic v1
             logger.debug(f"Request Log: {log_data.json()}")
 
-        await self.log_repo.create(log_data)
+        if result.success or not failed_attempt_logged:
+            await self.log_repo.create(log_data)
         
         return result.response, {
             "trace_id": trace_id,
@@ -531,8 +581,51 @@ class ProxyService:
 
             return wrapped()
             
+        async def log_failed_attempt(attempt: AttemptRecord) -> None:
+            provider_mapping = provider_mapping_by_id.get(attempt.provider.provider_id)
+            resolved_price = resolve_price(
+                model_input_price=model_mapping.input_price,
+                model_output_price=model_mapping.output_price,
+                provider_input_price=provider_mapping.input_price if provider_mapping else None,
+                provider_output_price=provider_mapping.output_price if provider_mapping else None,
+            )
+            attempt_log = RequestLogCreate(
+                request_time=attempt.request_time,
+                api_key_id=api_key_id,
+                api_key_name=api_key_name,
+                requested_model=requested_model,
+                target_model=attempt.provider.target_model,
+                provider_id=attempt.provider.provider_id,
+                provider_name=attempt.provider.provider_name,
+                retry_count=attempt.attempt_index + 1,
+                matched_provider_count=len(candidates),
+                first_byte_delay_ms=attempt.response.first_byte_delay_ms,
+                total_time_ms=attempt.response.total_time_ms,
+                input_tokens=input_tokens,
+                output_tokens=None,
+                total_cost=None,
+                input_cost=None,
+                output_cost=None,
+                price_source=resolved_price.price_source,
+                request_headers=sanitize_headers(headers),
+                request_body=body,
+                response_status=attempt.response.status_code,
+                response_body=self._serialize_response_body(attempt.response.body),
+                error_info=attempt.response.error,
+                trace_id=trace_id,
+                is_stream=True,
+            )
+            try:
+                with anyio.CancelScope(shield=True):
+                    await self.log_repo.create(attempt_log)
+            except Exception:
+                pass
+
         stream_gen = self.retry_handler.execute_with_retry_stream(
-            candidates, requested_model, forward_stream_fn
+            candidates,
+            requested_model,
+            forward_stream_fn,
+            on_failure_attempt=log_failed_attempt,
         )
         
         # Get first chunk to determine status
