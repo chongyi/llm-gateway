@@ -255,6 +255,27 @@ class ModelService:
                 message=f"Model-provider mapping with id {id} not found",
                 code="mapping_not_found",
             )
+
+        # Validate merged billing config to avoid persisting invalid combinations.
+        from app.domain.model import ModelMappingProviderCreate
+
+        update_data = data.model_dump(exclude_unset=True)
+        merged = {
+            "requested_model": existing.requested_model,
+            "provider_id": existing.provider_id,
+            "target_model_name": existing.target_model_name,
+            "provider_rules": existing.provider_rules,
+            "priority": existing.priority,
+            "weight": existing.weight,
+            "is_active": existing.is_active,
+            "input_price": existing.input_price,
+            "output_price": existing.output_price,
+            "billing_mode": existing.billing_mode or "token_flat",
+            "per_request_price": existing.per_request_price,
+            "tiered_pricing": existing.tiered_pricing,
+        }
+        merged.update(update_data)
+        ModelMappingProviderCreate(**merged)
         
         result = await self.model_repo.update_provider_mapping(id, data)
         return result  # type: ignore
@@ -306,6 +327,9 @@ class ModelService:
                         provider_rules=pm.provider_rules,
                         input_price=pm.input_price,
                         output_price=pm.output_price,
+                        billing_mode=pm.billing_mode,
+                        per_request_price=pm.per_request_price,
+                        tiered_pricing=pm.tiered_pricing,
                         priority=pm.priority,
                         weight=pm.weight,
                         is_active=pm.is_active
@@ -362,7 +386,7 @@ class ModelService:
                         continue
                     
                     from app.domain.model import ModelMappingProviderCreate
-                    await self.model_repo.create_provider_mapping(
+                    await self.model_repo.add_provider_mapping(
                         ModelMappingProviderCreate(
                             requested_model=item.requested_model,
                             provider_id=provider.id,
@@ -370,6 +394,9 @@ class ModelService:
                             provider_rules=p_item.provider_rules,
                             input_price=p_item.input_price,
                             output_price=p_item.output_price,
+                            billing_mode=p_item.billing_mode or "token_flat",
+                            per_request_price=p_item.per_request_price,
+                            tiered_pricing=p_item.tiered_pricing,
                             priority=p_item.priority,
                             weight=p_item.weight,
                             is_active=p_item.is_active

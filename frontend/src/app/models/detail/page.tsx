@@ -51,6 +51,45 @@ function formatPrice(value: number | null | undefined) {
   return formatUsd(value);
 }
 
+function formatBilling(mapping: ModelMappingProvider) {
+  const mode = mapping.billing_mode ?? 'token_flat';
+  if (mode === 'per_request') {
+    const price =
+      mapping.per_request_price === null || mapping.per_request_price === undefined
+        ? '-'
+        : formatUsd(mapping.per_request_price);
+    return `Per request: ${price}`;
+  }
+  if (mode === 'token_tiered') {
+    const tiers = mapping.tiered_pricing ?? [];
+    if (!tiers.length) return 'Tiered: -';
+    const preview = tiers
+      .slice(0, 2)
+      .map((t) => {
+        const max =
+          t.max_input_tokens === null || t.max_input_tokens === undefined
+            ? '∞'
+            : String(t.max_input_tokens);
+        return `≤${max}: ${formatUsd(t.input_price)}`;
+      })
+      .join(', ');
+    return `Tiered: ${preview}${tiers.length > 2 ? ` (+${tiers.length - 2})` : ''}`;
+  }
+  // token_flat (default)
+  const inP = mapping.input_price;
+  const outP = mapping.output_price;
+  if (
+    inP !== null &&
+    inP !== undefined &&
+    outP !== null &&
+    outP !== undefined &&
+    inP === outP
+  ) {
+    return `Token: ${formatUsd(inP)} / 1M`;
+  }
+  return `Token: In ${formatPrice(inP)} / Out ${formatPrice(outP)} (per 1M)`;
+}
+
 export default function ModelDetailPage() {
   return (
     <Suspense fallback={<LoadingSpinner />}>
@@ -237,7 +276,7 @@ function ModelDetailContent() {
                 <TableRow>
                   <TableHead>Provider</TableHead>
                   <TableHead>Target Model</TableHead>
-                  <TableHead>Price Override</TableHead>
+                  <TableHead>Billing</TableHead>
                   <TableHead>Priority</TableHead>
                   <TableHead>Weight</TableHead>
                   <TableHead>Rules</TableHead>
@@ -271,9 +310,7 @@ function ModelDetailContent() {
                         <code className="text-sm">{mapping.target_model_name}</code>
                       </TableCell>
                       <TableCell className="text-sm">
-                        <span className="font-mono">In: {formatPrice(mapping.input_price)}</span>
-                        <span className="mx-2 text-muted-foreground">/</span>
-                        <span className="font-mono">Out: {formatPrice(mapping.output_price)}</span>
+                        <span className="font-mono">{formatBilling(mapping)}</span>
                       </TableCell>
                       <TableCell>{mapping.priority}</TableCell>
                       <TableCell>{mapping.weight}</TableCell>

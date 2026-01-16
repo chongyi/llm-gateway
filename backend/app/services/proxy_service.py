@@ -21,7 +21,7 @@ from app.common.protocol_conversion import (
     normalize_protocol,
 )
 from app.common.token_counter import get_token_counter
-from app.common.costs import calculate_cost, resolve_price
+from app.common.costs import calculate_cost_from_billing, resolve_billing
 from app.common.utils import generate_trace_id
 from app.common.time import utc_now
 from app.domain.log import RequestLogCreate
@@ -234,9 +234,13 @@ class ProxyService:
         async def log_failed_attempt(attempt: AttemptRecord) -> None:
             nonlocal failed_attempt_logged
             provider_mapping = provider_mapping_by_id.get(attempt.provider.provider_id)
-            resolved_price = resolve_price(
+            billing = resolve_billing(
+                input_tokens=input_tokens,
                 model_input_price=model_mapping.input_price,
                 model_output_price=model_mapping.output_price,
+                provider_billing_mode=provider_mapping.billing_mode if provider_mapping else None,
+                provider_per_request_price=provider_mapping.per_request_price if provider_mapping else None,
+                provider_tiered_pricing=provider_mapping.tiered_pricing if provider_mapping else None,
                 provider_input_price=provider_mapping.input_price if provider_mapping else None,
                 provider_output_price=provider_mapping.output_price if provider_mapping else None,
             )
@@ -257,7 +261,7 @@ class ProxyService:
                 total_cost=None,
                 input_cost=None,
                 output_cost=None,
-                price_source=resolved_price.price_source,
+                price_source=billing.price_source,
                 request_headers=sanitize_headers(headers),
                 request_body=body,
                 response_status=attempt.response.status_code,
@@ -368,17 +372,20 @@ class ProxyService:
         provider_mapping = (
             provider_mapping_by_id.get(final_provider_id) if final_provider_id is not None else None
         )
-        resolved_price = resolve_price(
+        billing = resolve_billing(
+            input_tokens=input_tokens,
             model_input_price=model_mapping.input_price,
             model_output_price=model_mapping.output_price,
+            provider_billing_mode=provider_mapping.billing_mode if provider_mapping else None,
+            provider_per_request_price=provider_mapping.per_request_price if provider_mapping else None,
+            provider_tiered_pricing=provider_mapping.tiered_pricing if provider_mapping else None,
             provider_input_price=provider_mapping.input_price if provider_mapping else None,
             provider_output_price=provider_mapping.output_price if provider_mapping else None,
         )
-        cost = calculate_cost(
+        cost = calculate_cost_from_billing(
+            billing=billing,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
-            input_price=resolved_price.input_price,
-            output_price=resolved_price.output_price,
         )
         log_data = RequestLogCreate(
             request_time=request_time,
@@ -397,7 +404,7 @@ class ProxyService:
             total_cost=cost.total_cost,
             input_cost=cost.input_cost,
             output_cost=cost.output_cost,
-            price_source=resolved_price.price_source,
+            price_source=billing.price_source,
             request_headers=sanitize_headers(headers),
             request_body=body,
 
@@ -583,9 +590,13 @@ class ProxyService:
             
         async def log_failed_attempt(attempt: AttemptRecord) -> None:
             provider_mapping = provider_mapping_by_id.get(attempt.provider.provider_id)
-            resolved_price = resolve_price(
+            billing = resolve_billing(
+                input_tokens=input_tokens,
                 model_input_price=model_mapping.input_price,
                 model_output_price=model_mapping.output_price,
+                provider_billing_mode=provider_mapping.billing_mode if provider_mapping else None,
+                provider_per_request_price=provider_mapping.per_request_price if provider_mapping else None,
+                provider_tiered_pricing=provider_mapping.tiered_pricing if provider_mapping else None,
                 provider_input_price=provider_mapping.input_price if provider_mapping else None,
                 provider_output_price=provider_mapping.output_price if provider_mapping else None,
             )
@@ -606,7 +617,7 @@ class ProxyService:
                 total_cost=None,
                 input_cost=None,
                 output_cost=None,
-                price_source=resolved_price.price_source,
+                price_source=billing.price_source,
                 request_headers=sanitize_headers(headers),
                 request_body=body,
                 response_status=attempt.response.status_code,
@@ -668,17 +679,20 @@ class ProxyService:
                 provider_mapping = (
                     provider_mapping_by_id.get(final_provider_id) if final_provider_id is not None else None
                 )
-                resolved_price = resolve_price(
+                billing = resolve_billing(
+                    input_tokens=input_tokens,
                     model_input_price=model_mapping.input_price,
                     model_output_price=model_mapping.output_price,
+                    provider_billing_mode=provider_mapping.billing_mode if provider_mapping else None,
+                    provider_per_request_price=provider_mapping.per_request_price if provider_mapping else None,
+                    provider_tiered_pricing=provider_mapping.tiered_pricing if provider_mapping else None,
                     provider_input_price=provider_mapping.input_price if provider_mapping else None,
                     provider_output_price=provider_mapping.output_price if provider_mapping else None,
                 )
-                cost = calculate_cost(
+                cost = calculate_cost_from_billing(
+                    billing=billing,
                     input_tokens=input_tokens,
                     output_tokens=usage_result.output_tokens,
-                    input_price=resolved_price.input_price,
-                    output_price=resolved_price.output_price,
                 )
                 log_data = RequestLogCreate(
                     request_time=request_time,
@@ -697,7 +711,7 @@ class ProxyService:
                     total_cost=cost.total_cost,
                     input_cost=cost.input_cost,
                     output_cost=cost.output_cost,
-                    price_source=resolved_price.price_source,
+                    price_source=billing.price_source,
                     request_headers=sanitize_headers(headers),
                     request_body=body,
 

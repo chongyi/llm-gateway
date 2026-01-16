@@ -7,7 +7,23 @@ Defines Model Mapping and Model-Provider Mapping related Data Transfer Objects (
 from datetime import datetime
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+from typing_extensions import Literal
+
+
+BillingMode = Literal["token_flat", "token_tiered", "per_request"]
+
+
+class TokenTierPrice(BaseModel):
+    """Tier price config (based on input token count)"""
+
+    max_input_tokens: Optional[int] = Field(
+        None,
+        ge=1,
+        description="Upper bound for input tokens (inclusive); None means no upper bound",
+    )
+    input_price: float = Field(..., ge=0, description="Input price ($/1M tokens)")
+    output_price: float = Field(..., ge=0, description="Output price ($/1M tokens)")
 
 
 class ModelMappingBase(BaseModel):
@@ -100,6 +116,22 @@ class ModelMappingProviderCreate(ModelMappingProviderBase):
     # Provider override pricing (USD per 1,000,000 tokens)
     input_price: Optional[float] = Field(None, description="Input price override ($/1M tokens)")
     output_price: Optional[float] = Field(None, description="Output price override ($/1M tokens)")
+    # Billing mode for this provider mapping
+    billing_mode: BillingMode = Field("token_flat", description="Billing mode")
+    # Per-request fixed price (USD), used when billing_mode == per_request
+    per_request_price: Optional[float] = Field(None, ge=0, description="Per-request price ($)")
+    # Tiered pricing config, used when billing_mode == token_tiered
+    tiered_pricing: Optional[list[TokenTierPrice]] = Field(
+        None, description="Tiered pricing (based on input tokens)"
+    )
+
+    @model_validator(mode="after")
+    def _validate_billing(self) -> "ModelMappingProviderCreate":
+        if self.billing_mode == "per_request" and self.per_request_price is None:
+            raise ValueError("per_request_price is required when billing_mode=per_request")
+        if self.billing_mode == "token_tiered" and not self.tiered_pricing:
+            raise ValueError("tiered_pricing is required when billing_mode=token_tiered")
+        return self
 
 
 class ModelMappingProviderUpdate(BaseModel):
@@ -112,6 +144,9 @@ class ModelMappingProviderUpdate(BaseModel):
     is_active: Optional[bool] = None
     input_price: Optional[float] = None
     output_price: Optional[float] = None
+    billing_mode: Optional[BillingMode] = None
+    per_request_price: Optional[float] = Field(None, ge=0)
+    tiered_pricing: Optional[list[TokenTierPrice]] = None
 
 
 class ModelMappingProvider(ModelMappingProviderBase):
@@ -121,6 +156,9 @@ class ModelMappingProvider(ModelMappingProviderBase):
     provider_rules: Optional[dict[str, Any]] = None
     input_price: Optional[float] = None
     output_price: Optional[float] = None
+    billing_mode: Optional[BillingMode] = None
+    per_request_price: Optional[float] = None
+    tiered_pricing: Optional[list[TokenTierPrice]] = None
     priority: int = 0
     weight: int = 1
     is_active: bool = True
@@ -150,6 +188,9 @@ class ModelProviderExport(BaseModel):
     provider_rules: Optional[dict[str, Any]] = None
     input_price: Optional[float] = None
     output_price: Optional[float] = None
+    billing_mode: Optional[BillingMode] = None
+    per_request_price: Optional[float] = None
+    tiered_pricing: Optional[list[TokenTierPrice]] = None
     priority: int = 0
     weight: int = 1
     is_active: bool = True

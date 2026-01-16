@@ -140,6 +140,14 @@ class ModelMappingProvider(Base):
     # Provider override pricing (USD per 1,000,000 tokens)
     input_price: Mapped[Optional[float]] = mapped_column(Numeric(12, 4), nullable=True)
     output_price: Mapped[Optional[float]] = mapped_column(Numeric(12, 4), nullable=True)
+    # Billing mode: token_flat / token_tiered / per_request (NULL treated as token_flat for backward compatibility)
+    billing_mode: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    # Per-request fixed price (USD)
+    per_request_price: Mapped[Optional[float]] = mapped_column(
+        Numeric(12, 4), nullable=True
+    )
+    # Tiered pricing config (JSON). Used when billing_mode == "token_tiered"
+    tiered_pricing: Mapped[Optional[list]] = mapped_column(SQLiteJSON, nullable=True)
     # Priority (Lower value means higher priority)
     priority: Mapped[int] = mapped_column(Integer, default=0)
     # Weight (Used for weighted round-robin, currently unused)
