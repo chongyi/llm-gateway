@@ -5,6 +5,7 @@
 
 import axios, { AxiosError, AxiosInstance, AxiosRequestConfig } from 'axios';
 import { ApiError } from '@/types';
+import { getApiErrorMessage } from './error';
 
 /** API base URL, configurable via environment variables */
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
@@ -57,18 +58,8 @@ apiClient.interceptors.response.use(
       window.dispatchEvent(new CustomEvent('auth:required'));
     }
 
-    // FastAPI default error structure (HTTPException)
-    const detail = (error.response?.data as { detail?: unknown } | undefined)?.detail;
-    if (typeof detail === 'string' && detail) {
-      return Promise.reject(new Error(detail));
-    }
-
-    // Extract error message
-    if (error.response?.data?.error) {
-      const apiError = error.response.data.error;
-      return Promise.reject(new Error(apiError.message || 'Request failed'));
-    }
-    return Promise.reject(new Error(error.message || 'Network error'));
+    const message = getApiErrorMessage(error, error.message || 'Network error');
+    return Promise.reject(new Error(message));
   }
 );
 

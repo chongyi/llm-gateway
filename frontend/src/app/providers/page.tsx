@@ -83,8 +83,8 @@ export default function ProvidersPage() {
       }
       setFormOpen(false);
       setEditingProvider(null);
-    } catch (error) {
-      console.error('Save failed:', error);
+    } catch {
+      // Errors are surfaced via mutation onError toast
     }
   };
 
@@ -95,8 +95,8 @@ export default function ProvidersPage() {
       await deleteMutation.mutateAsync(deletingProvider.id);
       setDeleteDialogOpen(false);
       setDeletingProvider(null);
-    } catch (error) {
-      console.error('Delete failed:', error);
+    } catch {
+      // Errors are surfaced via mutation onError toast
     }
   };
 

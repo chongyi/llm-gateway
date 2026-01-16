@@ -16,6 +16,7 @@ import {
   updateModelProvider,
   deleteModelProvider,
 } from '@/lib/api';
+import { getApiErrorMessage } from '@/lib/api/error';
 import {
   ModelMapping,
   ModelMappingCreate,
@@ -72,6 +73,9 @@ export function useCreateModel() {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.models });
       toast.success('Created successfully');
     },
+    onError: (error) => {
+      toast.error(getApiErrorMessage(error, 'Create failed'));
+    },
   });
 }
 
@@ -96,6 +100,9 @@ export function useUpdateModel() {
       });
       toast.success('Saved successfully');
     },
+    onError: (error) => {
+      toast.error(getApiErrorMessage(error, 'Save failed'));
+    },
   });
 }
 
@@ -110,6 +117,9 @@ export function useDeleteModel() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.models });
       toast.success('Deleted successfully');
+    },
+    onError: (error) => {
+      toast.error(getApiErrorMessage(error, 'Delete failed'));
     },
   });
 }
@@ -143,6 +153,9 @@ export function useCreateModelProvider() {
       });
       toast.success('Created successfully');
     },
+    onError: (error) => {
+      toast.error(getApiErrorMessage(error, 'Create failed'));
+    },
   });
 }
 
@@ -165,6 +178,9 @@ export function useUpdateModelProvider() {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.models });
       toast.success('Saved successfully');
     },
+    onError: (error) => {
+      toast.error(getApiErrorMessage(error, 'Save failed'));
+    },
   });
 }
 
@@ -180,6 +196,9 @@ export function useDeleteModelProvider() {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.modelProviders });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.models });
       toast.success('Deleted successfully');
+    },
+    onError: (error) => {
+      toast.error(getApiErrorMessage(error, 'Delete failed'));
     },
   });
 }

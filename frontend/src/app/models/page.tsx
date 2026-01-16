@@ -83,8 +83,8 @@ export default function ModelsPage() {
       }
       setFormOpen(false);
       setEditingModel(null);
-    } catch (error) {
-      console.error('Save failed:', error);
+    } catch {
+      // Errors are surfaced via mutation onError toast
     }
   };
 
@@ -95,8 +95,8 @@ export default function ModelsPage() {
       await deleteMutation.mutateAsync(deletingModel.requested_model);
       setDeleteDialogOpen(false);
       setDeletingModel(null);
-    } catch (error) {
-      console.error('Delete failed:', error);
+    } catch {
+      // Errors are surfaced via mutation onError toast
     }
   };
 

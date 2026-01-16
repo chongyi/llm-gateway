@@ -111,9 +111,8 @@ function ModelDetailContent() {
       setFormOpen(false);
       setEditingMapping(null);
       refetch();
-    } catch (error) {
-      console.error('Save failed:', error);
-      alert('Save failed, please check input or retry');
+    } catch {
+      // Errors are surfaced via mutation onError toast
     }
   };
 
@@ -124,8 +123,8 @@ function ModelDetailContent() {
       setDeleteDialogOpen(false);
       setDeletingMapping(null);
       refetch();
-    } catch (error) {
-      console.error('Delete failed:', error);
+    } catch {
+      // Errors are surfaced via mutation onError toast
     }
   };
 
