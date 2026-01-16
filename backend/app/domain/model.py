@@ -131,6 +131,9 @@ class ModelMappingProviderCreate(ModelMappingProviderBase):
             raise ValueError("per_request_price is required when billing_mode=per_request")
         if self.billing_mode == "token_tiered" and not self.tiered_pricing:
             raise ValueError("tiered_pricing is required when billing_mode=token_tiered")
+        if self.billing_mode == "token_flat":
+            if self.input_price is None or self.output_price is None:
+                raise ValueError("input_price and output_price are required when billing_mode=token_flat")
         return self
 
 

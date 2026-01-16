@@ -386,15 +386,25 @@ class ModelService:
                         continue
                     
                     from app.domain.model import ModelMappingProviderCreate
+                    billing_mode = p_item.billing_mode or "token_flat"
+                    input_price = p_item.input_price
+                    output_price = p_item.output_price
+                    if billing_mode == "token_flat":
+                        # Backward-compatible import: old exports may omit token prices.
+                        if input_price is None:
+                            input_price = item.input_price if item.input_price is not None else 0.0
+                        if output_price is None:
+                            output_price = item.output_price if item.output_price is not None else 0.0
+
                     await self.model_repo.add_provider_mapping(
                         ModelMappingProviderCreate(
                             requested_model=item.requested_model,
                             provider_id=provider.id,
                             target_model_name=p_item.target_model_name,
                             provider_rules=p_item.provider_rules,
-                            input_price=p_item.input_price,
-                            output_price=p_item.output_price,
-                            billing_mode=p_item.billing_mode or "token_flat",
+                            input_price=input_price,
+                            output_price=output_price,
+                            billing_mode=billing_mode,
                             per_request_price=p_item.per_request_price,
                             tiered_pricing=p_item.tiered_pricing,
                             priority=p_item.priority,

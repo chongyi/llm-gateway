@@ -61,14 +61,12 @@ interface FormData {
   provider_rules: RuleSet | null;
   billing_mode: 'token_flat' | 'token_tiered' | 'per_request';
   // token_flat
-  token_price: string;
-  separate_io: boolean;
   input_price: string;
   output_price: string;
   // per_request
   per_request_price: string;
   // token_tiered
-  tiers: Array<{ max_input_tokens: string; token_price: string }>;
+  tiers: Array<{ max_input_tokens: string; input_price: string; output_price: string }>;
   priority: number;
   weight: number;
   is_active: boolean;
@@ -105,12 +103,10 @@ export function ModelProviderForm({
       target_model_name: '',
       provider_rules: null,
       billing_mode: 'token_flat',
-      token_price: '',
-      separate_io: false,
       input_price: '',
       output_price: '',
       per_request_price: '',
-      tiers: [{ max_input_tokens: '32768', token_price: '' }],
+      tiers: [{ max_input_tokens: '32768', input_price: '', output_price: '' }],
       priority: 0,
       weight: 1,
       is_active: true,
@@ -125,8 +121,6 @@ export function ModelProviderForm({
   const providerId = watch('provider_id');
   const isActive = watch('is_active');
   const billingMode = watch('billing_mode');
-  const separateIO = watch('separate_io');
-  const tokenPrice = watch('token_price');
 
   // Fill form data in edit mode
   useEffect(() => {
@@ -136,32 +130,11 @@ export function ModelProviderForm({
         | 'token_tiered'
         | 'per_request';
 
-      const legacyHasSeparateIO =
-        mode === 'token_flat' &&
-        mapping.input_price !== null &&
-        mapping.input_price !== undefined &&
-        mapping.output_price !== null &&
-        mapping.output_price !== undefined &&
-        mapping.input_price !== mapping.output_price;
-
-      const tokenPriceValue =
-        legacyHasSeparateIO
-          ? ''
-          : mapping.input_price !== null && mapping.input_price !== undefined
-            ? String(mapping.input_price)
-            : mapping.output_price !== null && mapping.output_price !== undefined
-              ? String(mapping.output_price)
-              : defaultPrices?.input_price === null || defaultPrices?.input_price === undefined
-                ? '0'
-                : String(defaultPrices.input_price);
-
       reset({
         provider_id: String(mapping.provider_id),
         target_model_name: mapping.target_model_name,
         provider_rules: mapping.provider_rules || null,
         billing_mode: mode,
-        token_price: tokenPriceValue,
-        separate_io: legacyHasSeparateIO,
         input_price:
           mapping.input_price === null || mapping.input_price === undefined
             ? defaultPrices?.input_price === null || defaultPrices?.input_price === undefined
@@ -185,32 +158,50 @@ export function ModelProviderForm({
                   t.max_input_tokens === null || t.max_input_tokens === undefined
                     ? ''
                     : String(t.max_input_tokens),
-                token_price: String(t.input_price),
+                input_price: String(t.input_price),
+                output_price: String(t.output_price),
               }))
-            : [{ max_input_tokens: '32768', token_price: tokenPriceValue }],
+            : [
+                {
+                  max_input_tokens: '32768',
+                  input_price:
+                    mapping.input_price === null || mapping.input_price === undefined
+                      ? '0'
+                      : String(mapping.input_price),
+                  output_price:
+                    mapping.output_price === null || mapping.output_price === undefined
+                      ? '0'
+                      : String(mapping.output_price),
+                },
+              ],
         priority: mapping.priority,
         weight: mapping.weight,
         is_active: mapping.is_active,
       });
     } else {
-      const fallbackTokenPrice =
+      const fallbackInputPrice =
         defaultPrices?.input_price === null || defaultPrices?.input_price === undefined
           ? '0'
           : String(defaultPrices.input_price);
+      const fallbackOutputPrice =
+        defaultPrices?.output_price === null || defaultPrices?.output_price === undefined
+          ? '0'
+          : String(defaultPrices.output_price);
       reset({
         provider_id: '',
         target_model_name: '',
         provider_rules: null,
         billing_mode: 'token_flat',
-        token_price: fallbackTokenPrice,
-        separate_io: false,
-        input_price: fallbackTokenPrice,
-        output_price:
-          defaultPrices?.output_price === null || defaultPrices?.output_price === undefined
-            ? fallbackTokenPrice
-            : String(defaultPrices.output_price),
+        input_price: fallbackInputPrice,
+        output_price: fallbackOutputPrice,
         per_request_price: '0',
-        tiers: [{ max_input_tokens: '32768', token_price: fallbackTokenPrice }],
+        tiers: [
+          {
+            max_input_tokens: '32768',
+            input_price: fallbackInputPrice,
+            output_price: fallbackOutputPrice,
+          },
+        ],
         priority: 0,
         weight: 1,
         is_active: true,
@@ -218,44 +209,31 @@ export function ModelProviderForm({
     }
   }, [defaultPrices?.input_price, defaultPrices?.output_price, mapping, reset]);
 
-  // Keep token_flat unified price in sync with input/output when not using separate I/O pricing
-  useEffect(() => {
-    if (billingMode !== 'token_flat' || separateIO) return;
-    setValue('input_price', tokenPrice || '0');
-    setValue('output_price', tokenPrice || '0');
-  }, [billingMode, separateIO, setValue, tokenPrice]);
-
   // Submit form
   const onFormSubmit = (data: FormData) => {
     const billingMode = data.billing_mode;
 
     const buildFlatPricing = () => {
-      if (data.separate_io) {
-        const inputPrice = data.input_price.trim();
-        const outputPrice = data.output_price.trim();
-        return {
-          input_price: inputPrice ? Number(inputPrice) : null,
-          output_price: outputPrice ? Number(outputPrice) : null,
-        };
-      }
-      const tokenPrice = data.token_price.trim();
-      const numeric = tokenPrice ? Number(tokenPrice) : 0;
-      return { input_price: numeric, output_price: numeric };
+      const inputPrice = data.input_price.trim();
+      const outputPrice = data.output_price.trim();
+      return {
+        input_price: Number(inputPrice || '0'),
+        output_price: Number(outputPrice || '0'),
+      };
     };
 
     const buildTieredPricing = () => {
-      return (data.tiers || [])
-        .filter((t) => t.token_price.trim() !== '')
-        .map((t) => {
-          const price = Number(t.token_price.trim());
-          const maxStr = t.max_input_tokens.trim();
-          const maxInputTokens = maxStr === '' ? null : Number(maxStr);
-          return {
-            max_input_tokens: maxInputTokens,
-            input_price: price,
-            output_price: price,
-          };
-        });
+      return (data.tiers || []).map((t) => {
+        const inputPrice = Number((t.input_price || '0').trim() || '0');
+        const outputPrice = Number((t.output_price || '0').trim() || '0');
+        const maxStr = t.max_input_tokens.trim();
+        const maxInputTokens = maxStr === '' ? null : Number(maxStr);
+        return {
+          max_input_tokens: maxInputTokens,
+          input_price: inputPrice,
+          output_price: outputPrice,
+        };
+      });
     };
 
     if (isEdit) {
@@ -437,11 +415,11 @@ export function ModelProviderForm({
             ) : billingMode === 'token_tiered' ? (
               <div className="space-y-3">
                 <div className="text-xs text-muted-foreground">
-                  Choose the price based on input tokens, then apply the same price to input/output tokens.
+                  Choose the tier by input tokens, then bill input/output tokens separately by that tier’s prices.
                 </div>
                 <div className="space-y-2">
                   {tierFields.map((field, idx) => (
-                    <div key={field.id} className="grid grid-cols-5 gap-2 items-end">
+                    <div key={field.id} className="grid grid-cols-7 gap-2 items-end">
                       <div className="col-span-2 space-y-1">
                         <Label>Max Input Tokens</Label>
                         <Input
@@ -452,13 +430,23 @@ export function ModelProviderForm({
                         />
                       </div>
                       <div className="col-span-2 space-y-1">
-                        <Label>Price (USD / 1M tokens)</Label>
+                        <Label>Input (USD / 1M)</Label>
                         <Input
                           type="number"
                           min={0}
                           step="0.0001"
                           placeholder="e.g. 1.2"
-                          {...register(`tiers.${idx}.token_price` as const)}
+                          {...register(`tiers.${idx}.input_price` as const)}
+                        />
+                      </div>
+                      <div className="col-span-2 space-y-1">
+                        <Label>Output (USD / 1M)</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          step="0.0001"
+                          placeholder="e.g. 3.6"
+                          {...register(`tiers.${idx}.output_price` as const)}
                         />
                       </div>
                       <div className="col-span-1 flex gap-2">
@@ -476,7 +464,9 @@ export function ModelProviderForm({
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => appendTier({ max_input_tokens: '', token_price: '' })}
+                    onClick={() =>
+                      appendTier({ max_input_tokens: '', input_price: '', output_price: '' })
+                    }
                   >
                     Add Tier
                   </Button>
@@ -484,51 +474,28 @@ export function ModelProviderForm({
               </div>
             ) : (
               <div className="space-y-3">
-                <div className="space-y-2">
-                  <Label htmlFor="token_price">Price (USD / 1M tokens)</Label>
-                  <Input
-                    id="token_price"
-                    type="number"
-                    min={0}
-                    step="0.0001"
-                    {...register('token_price')}
-                    disabled={separateIO}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="separate_io">Separate input/output pricing</Label>
-                  <Switch
-                    id="separate_io"
-                    checked={separateIO}
-                    onCheckedChange={(checked) => setValue('separate_io', checked)}
-                  />
-                </div>
-
-                {separateIO && (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="input_price">Input Price (USD / 1M tokens)</Label>
-                      <Input
-                        id="input_price"
-                        type="number"
-                        min={0}
-                        step="0.0001"
-                        {...register('input_price')}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="output_price">Output Price (USD / 1M tokens)</Label>
-                      <Input
-                        id="output_price"
-                        type="number"
-                        min={0}
-                        step="0.0001"
-                        {...register('output_price')}
-                      />
-                    </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="input_price">Input Price (USD / 1M tokens)</Label>
+                    <Input
+                      id="input_price"
+                      type="number"
+                      min={0}
+                      step="0.0001"
+                      {...register('input_price')}
+                    />
                   </div>
-                )}
+                  <div className="space-y-2">
+                    <Label htmlFor="output_price">Output Price (USD / 1M tokens)</Label>
+                    <Input
+                      id="output_price"
+                      type="number"
+                      min={0}
+                      step="0.0001"
+                      {...register('output_price')}
+                    />
+                  </div>
+                </div>
               </div>
             )}
 

@@ -70,24 +70,13 @@ function formatBilling(mapping: ModelMappingProvider) {
           t.max_input_tokens === null || t.max_input_tokens === undefined
             ? '∞'
             : String(t.max_input_tokens);
-        return `≤${max}: ${formatUsd(t.input_price)}`;
+        return `≤${max}: In ${formatUsd(t.input_price)} / Out ${formatUsd(t.output_price)}`;
       })
       .join(', ');
     return `Tiered: ${preview}${tiers.length > 2 ? ` (+${tiers.length - 2})` : ''}`;
   }
   // token_flat (default)
-  const inP = mapping.input_price;
-  const outP = mapping.output_price;
-  if (
-    inP !== null &&
-    inP !== undefined &&
-    outP !== null &&
-    outP !== undefined &&
-    inP === outP
-  ) {
-    return `Token: ${formatUsd(inP)} / 1M`;
-  }
-  return `Token: In ${formatPrice(inP)} / Out ${formatPrice(outP)} (per 1M)`;
+  return `Token: In ${formatPrice(mapping.input_price)} / Out ${formatPrice(mapping.output_price)} (per 1M)`;
 }
 
 export default function ModelDetailPage() {
