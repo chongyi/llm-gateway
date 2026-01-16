@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from app.api.deps import CurrentApiKey, ModelServiceDep, ProxyServiceDep
 from app.common.errors import AppError
+from app.common.proxy_headers import sanitize_upstream_response_headers
 from app.common.openai_responses import (
     chat_completion_to_responses_response,
     chat_completions_sse_to_responses_sse,
@@ -82,18 +83,18 @@ async def _handle_proxy_request(
                     return JSONResponse(
                         content=content,
                         status_code=initial_response.status_code,
-                        headers=initial_response.headers,
+                        headers=sanitize_upstream_response_headers(initial_response.headers),
                     )
                 return Response(
                     content=content,
                     status_code=initial_response.status_code,
-                    headers=initial_response.headers,
+                    headers=sanitize_upstream_response_headers(initial_response.headers),
                 )
             
             return StreamingResponse(
                 stream_gen,
                 status_code=initial_response.status_code,
-                headers=initial_response.headers,
+                headers=sanitize_upstream_response_headers(initial_response.headers),
                 media_type="text/event-stream",
             )
         else:
@@ -112,12 +113,12 @@ async def _handle_proxy_request(
                 return JSONResponse(
                     content=content,
                     status_code=response.status_code,
-                    headers=response.headers,
+                    headers=sanitize_upstream_response_headers(response.headers),
                 )
             return Response(
                 content=content,
                 status_code=response.status_code,
-                headers=response.headers,
+                headers=sanitize_upstream_response_headers(response.headers),
             )
             
     except AppError as e:
@@ -209,12 +210,12 @@ async def responses(
                     return JSONResponse(
                         content=content,
                         status_code=initial_response.status_code,
-                        headers=initial_response.headers,
+                        headers=sanitize_upstream_response_headers(initial_response.headers),
                     )
                 return Response(
                     content=content,
                     status_code=initial_response.status_code,
-                    headers=initial_response.headers,
+                    headers=sanitize_upstream_response_headers(initial_response.headers),
                 )
 
             converted_stream = chat_completions_sse_to_responses_sse(
@@ -224,7 +225,7 @@ async def responses(
             return StreamingResponse(
                 converted_stream,
                 status_code=initial_response.status_code,
-                headers=initial_response.headers,
+                headers=sanitize_upstream_response_headers(initial_response.headers),
                 media_type="text/event-stream",
             )
 
@@ -257,13 +258,13 @@ async def responses(
             return JSONResponse(
                 content=content,
                 status_code=response.status_code,
-                headers=response.headers,
+                headers=sanitize_upstream_response_headers(response.headers),
             )
 
         return Response(
             content=content,
             status_code=response.status_code,
-            headers=response.headers,
+            headers=sanitize_upstream_response_headers(response.headers),
         )
 
     except AppError as e:
