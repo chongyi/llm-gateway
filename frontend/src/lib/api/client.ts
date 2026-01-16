@@ -53,12 +53,18 @@ apiClient.interceptors.response.use(
   (error: AxiosError<ApiError>) => {
     const statusCode = error.response?.status;
     const url = error.config?.url || '';
+    const statusText = error.response?.statusText;
 
     if (typeof window !== 'undefined' && statusCode === 401 && !url.includes('/api/auth/')) {
       window.dispatchEvent(new CustomEvent('auth:required'));
     }
 
-    const message = getApiErrorMessage(error, error.message || 'Network error');
+    const httpFallback =
+      typeof statusCode === 'number'
+        ? `HTTP ${statusCode}${statusText ? ` ${statusText}` : ''}`
+        : error.message || 'Network error';
+
+    const message = getApiErrorMessage(error, httpFallback);
     return Promise.reject(new Error(message));
   }
 );

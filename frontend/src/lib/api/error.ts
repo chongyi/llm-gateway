@@ -7,6 +7,12 @@ type FastApiValidationError = {
   msg?: unknown;
 };
 
+function formatHttpStatus(status?: unknown, statusText?: unknown): string | null {
+  if (typeof status !== 'number' || !Number.isFinite(status)) return null;
+  const text = typeof statusText === 'string' && statusText ? ` ${statusText}` : '';
+  return `HTTP ${status}${text}`;
+}
+
 function formatFastApiDetail(detail: unknown): string | null {
   if (!detail) return null;
 
@@ -47,15 +53,21 @@ export function getApiErrorMessage(error: unknown, fallback = 'Request failed'):
   if (typeof error === 'object') {
     const maybeResponse = (error as { response?: unknown }).response;
     if (maybeResponse && typeof maybeResponse === 'object') {
+      const status = (maybeResponse as { status?: unknown }).status;
+      const statusText = (maybeResponse as { statusText?: unknown }).statusText;
       const data = (maybeResponse as { data?: unknown }).data;
       if (data && typeof data === 'object') {
+        // Prefer API error wrapper: { error: { message, type, code } }
+        const apiErrorMessage = (data as { error?: { message?: unknown } }).error?.message;
+        if (typeof apiErrorMessage === 'string' && apiErrorMessage) return apiErrorMessage;
+
         const detail = (data as { detail?: unknown }).detail;
         const detailMessage = formatFastApiDetail(detail);
         if (detailMessage) return detailMessage;
-
-        const apiErrorMessage = (data as { error?: { message?: unknown } }).error?.message;
-        if (typeof apiErrorMessage === 'string' && apiErrorMessage) return apiErrorMessage;
       }
+
+      const httpStatusMessage = formatHttpStatus(status, statusText);
+      if (httpStatusMessage) return httpStatusMessage;
     }
 
     const message = (error as { message?: unknown }).message;
@@ -64,4 +76,3 @@ export function getApiErrorMessage(error: unknown, fallback = 'Request failed'):
 
   return fallback;
 }
-
