@@ -47,9 +47,7 @@ export function getApiErrorMessage(error: unknown, fallback = 'Request failed'):
   if (!error) return fallback;
   if (typeof error === 'string') return error;
 
-  if (error instanceof Error && error.message) return error.message;
-
-  // In case an AxiosError bubbles up (e.g. if interceptors are bypassed)
+  // Prefer parsing response payload first (AxiosError is also an Error).
   if (typeof error === 'object') {
     const maybeResponse = (error as { response?: unknown }).response;
     if (maybeResponse && typeof maybeResponse === 'object') {
