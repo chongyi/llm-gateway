@@ -24,6 +24,7 @@ from app.common.token_counter import get_token_counter
 from app.common.costs import calculate_cost_from_billing, resolve_billing
 from app.common.utils import generate_trace_id
 from app.common.time import utc_now
+from app.common.usage_extractor import extract_output_tokens
 from app.domain.log import RequestLogCreate
 from app.domain.model import ModelMapping, ModelMappingProviderResponse
 from app.domain.provider import Provider
@@ -357,13 +358,9 @@ class ProxyService:
         output_tokens = 0
         if result.success and result.response.body:
             try:
-                # OpenAI format
-                if isinstance(result.response.body, dict):
-                    usage = result.response.body.get("usage", {})
-                    output_tokens = usage.get("completion_tokens", 0)
-                    if not output_tokens:
-                        # Anthropic format
-                        output_tokens = usage.get("output_tokens", 0)
+                extracted = extract_output_tokens(result.response.body)
+                if extracted is not None:
+                    output_tokens = extracted
             except Exception:
                 pass
         
