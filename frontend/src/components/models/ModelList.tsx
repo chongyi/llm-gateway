@@ -5,7 +5,6 @@
 
 'use client';
 
-import React from 'react';
 import Link from 'next/link';
 import {
   Table,
@@ -17,7 +16,7 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Eye, Pencil, Trash2 } from 'lucide-react';
+import { Pencil, Server, Trash2 } from 'lucide-react';
 import { ModelMapping } from '@/types';
 import { formatDateTime, getActiveStatus } from '@/lib/utils';
 
@@ -86,7 +85,7 @@ export function ModelList({
                     href={`/models/detail?model=${encodeURIComponent(model.requested_model)}`}
                   >
                     <Button variant="ghost" size="icon" title="View Details">
-                      <Eye className="h-4 w-4" suppressHydrationWarning />
+                      <Server className="h-4 w-4" suppressHydrationWarning />
                     </Button>
                   </Link>
                   <Button
