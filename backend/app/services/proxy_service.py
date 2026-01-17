@@ -34,7 +34,7 @@ from app.repositories.provider_repo import ProviderRepository
 from app.repositories.log_repo import LogRepository
 from app.rules import RuleEngine, RuleContext, TokenUsage, CandidateProvider
 from app.services.retry_handler import RetryHandler, AttemptRecord
-from app.services.strategy import RoundRobinStrategy, SelectionStrategy
+from app.services.strategy import RoundRobinStrategy, CostFirstStrategy, SelectionStrategy
 
 logger = logging.getLogger(__name__)
 
@@ -60,23 +60,38 @@ class ProxyService:
         model_repo: ModelRepository,
         provider_repo: ProviderRepository,
         log_repo: LogRepository,
-        strategy: Optional[SelectionStrategy] = None,
     ):
         """
         Initialize Service
-        
+
         Args:
             model_repo: Model Repository
             provider_repo: Provider Repository
             log_repo: Log Repository
-            strategy: Provider Selection Strategy (Optional, defaults to RoundRobinStrategy)
         """
         self.model_repo = model_repo
         self.provider_repo = provider_repo
         self.log_repo = log_repo
         self.rule_engine = RuleEngine()
-        self.strategy = strategy or RoundRobinStrategy()
-        self.retry_handler = RetryHandler(self.strategy)
+        # Strategy selection instances (reused for performance)
+        self._round_robin_strategy = RoundRobinStrategy()
+        self._cost_first_strategy = CostFirstStrategy()
+
+    def _get_strategy(self, strategy_name: str) -> SelectionStrategy:
+        """
+        Get strategy instance based on strategy name
+
+        Args:
+            strategy_name: Strategy name ("round_robin" or "cost_first")
+
+        Returns:
+            SelectionStrategy: Strategy instance
+        """
+        if strategy_name == "cost_first":
+            return self._cost_first_strategy
+        else:
+            # Default to round_robin for unknown strategies
+            return self._round_robin_strategy
 
     @staticmethod
     def _serialize_response_body(body: Any) -> str | None:
@@ -229,7 +244,11 @@ class ProxyService:
             for c in candidates
         ]
         logger.debug(f"Matched Providers: {json.dumps(candidates_info, ensure_ascii=False)}")
-        
+
+        # Select strategy based on model configuration
+        strategy = self._get_strategy(model_mapping.strategy)
+        retry_handler = RetryHandler(strategy)
+
         failed_attempt_logged = False
 
         async def log_failed_attempt(attempt: AttemptRecord) -> None:
@@ -318,7 +337,7 @@ class ProxyService:
                 )
                 return ProviderResponse(status_code=400, error=error_msg)
 
-        result = await self.retry_handler.execute_with_retry(
+        result = await retry_handler.execute_with_retry(
             candidates=candidates,
             requested_model=requested_model,
             forward_fn=forward_fn,
@@ -481,7 +500,11 @@ class ProxyService:
             for c in candidates
         ]
         logger.debug(f"Matched Providers: {json.dumps(candidates_info, ensure_ascii=False)}")
-            
+
+        # Select strategy based on model configuration
+        strategy = self._get_strategy(model_mapping.strategy)
+        retry_handler = RetryHandler(strategy)
+
         # 8. Execute streaming request
         def forward_stream_fn(candidate: CandidateProvider):
             async def error_gen(msg: str):
@@ -630,7 +653,7 @@ class ProxyService:
             except Exception:
                 pass
 
-        stream_gen = self.retry_handler.execute_with_retry_stream(
+        stream_gen = retry_handler.execute_with_retry_stream(
             candidates,
             requested_model,
             forward_stream_fn,

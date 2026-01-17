@@ -12,6 +12,7 @@ from typing_extensions import Literal
 
 
 BillingMode = Literal["token_flat", "token_tiered", "per_request"]
+SelectionStrategyType = Literal["round_robin", "cost_first"]
 
 
 class TokenTierPrice(BaseModel):
@@ -28,13 +29,13 @@ class TokenTierPrice(BaseModel):
 
 class ModelMappingBase(BaseModel):
     """Model Mapping Base Model"""
-    
+
     # Requested Model Name (Primary Key)
     requested_model: str = Field(
         ..., min_length=1, max_length=100, description="Requested Model Name"
     )
-    # Selection Strategy, currently only supports round_robin
-    strategy: str = Field("round_robin", description="Selection Strategy")
+    # Selection Strategy: round_robin or cost_first
+    strategy: SelectionStrategyType = Field("round_robin", description="Selection Strategy")
 
 
 class ModelMappingCreate(ModelMappingBase):
@@ -53,8 +54,8 @@ class ModelMappingCreate(ModelMappingBase):
 
 class ModelMappingUpdate(BaseModel):
     """Update Model Mapping Request Model"""
-    
-    strategy: Optional[str] = None
+
+    strategy: Optional[SelectionStrategyType] = None
     matching_rules: Optional[dict[str, Any]] = None
     capabilities: Optional[dict[str, Any]] = None
     is_active: Optional[bool] = None
