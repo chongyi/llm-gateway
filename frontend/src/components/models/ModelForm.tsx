@@ -18,6 +18,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { RuleBuilder } from '@/components/common';
 import { ModelMapping, ModelMappingCreate, ModelMappingUpdate, RuleSet } from '@/types';
 import { isValidModelName } from '@/lib/utils';
@@ -224,15 +231,41 @@ export function ModelForm({
 
           {/* Strategy */}
           <div className="space-y-2">
-            <Label htmlFor="strategy">Select Strategy</Label>
-            <Input
-              id="strategy"
-              value="round_robin"
-              disabled
-              {...register('strategy')}
+            <Label htmlFor="strategy">Selection Strategy</Label>
+            <Controller
+              name="strategy"
+              control={control}
+              render={({ field }) => (
+                <Select
+                  value={field.value}
+                  onValueChange={field.onChange}
+                >
+                  <SelectTrigger id="strategy">
+                    <SelectValue placeholder="Select strategy" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="round_robin">
+                      <div className="flex flex-col">
+                        <span className="font-medium">Round Robin</span>
+                        <span className="text-xs text-muted-foreground">
+                          Distribute requests evenly across providers
+                        </span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="cost_first">
+                      <div className="flex flex-col">
+                        <span className="font-medium">Cost First</span>
+                        <span className="text-xs text-muted-foreground">
+                          Prioritize lowest-cost providers based on input tokens
+                        </span>
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
             />
             <p className="text-sm text-muted-foreground">
-              Currently only supports Round Robin strategy (round_robin)
+              Round Robin: Evenly distributes requests. Cost First: Selects provider with lowest estimated cost.
             </p>
           </div>
 
