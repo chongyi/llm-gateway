@@ -322,6 +322,7 @@ class ProxyService:
             candidates=candidates,
             requested_model=requested_model,
             forward_fn=forward_fn,
+            input_tokens=input_tokens,
             on_failure_attempt=log_failed_attempt,
         )
 
@@ -633,6 +634,7 @@ class ProxyService:
             candidates,
             requested_model,
             forward_stream_fn,
+            input_tokens=input_tokens,
             on_failure_attempt=log_failed_attempt,
         )
         

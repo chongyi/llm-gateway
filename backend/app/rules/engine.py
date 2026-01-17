@@ -82,6 +82,13 @@ class RuleEngine:
                         target_model=pm.target_model_name,
                         priority=pm.priority,
                         weight=pm.weight,
+                        billing_mode=pm.billing_mode,
+                        input_price=pm.input_price,
+                        output_price=pm.output_price,
+                        per_request_price=pm.per_request_price,
+                        tiered_pricing=pm.tiered_pricing,
+                        model_input_price=model_mapping.input_price,
+                        model_output_price=model_mapping.output_price,
                     )
                 )
         
@@ -131,6 +138,13 @@ class RuleEngine:
                         target_model=pm.target_model_name,
                         priority=pm.priority,
                         weight=pm.weight,
+                        billing_mode=pm.billing_mode,
+                        input_price=pm.input_price,
+                        output_price=pm.output_price,
+                        per_request_price=pm.per_request_price,
+                        tiered_pricing=pm.tiered_pricing,
+                        model_input_price=model_mapping.input_price,
+                        model_output_price=model_mapping.output_price,
                     )
                 )
         
