@@ -82,16 +82,18 @@ class RetryHandler:
         requested_model: str,
         forward_fn: Callable[[CandidateProvider], Any],
         *,
+        input_tokens: Optional[int] = None,
         on_failure_attempt: Callable[[AttemptRecord], Awaitable[None]] | None = None,
     ) -> RetryResult:
         """
         Execute Request with Retry
-        
+
         Args:
             candidates: List of candidate providers
             requested_model: Requested model name
             forward_fn: Forwarding function, accepts CandidateProvider and returns ProviderResponse
-        
+            input_tokens: Number of input tokens (for cost-based selection)
+
         Returns:
             RetryResult: Retry result
         """
@@ -116,7 +118,7 @@ class RetryHandler:
         attempt_index = 0
         
         # Select the first provider
-        current_provider = await self.strategy.select(candidates, requested_model)
+        current_provider = await self.strategy.select(candidates, requested_model, input_tokens)
         
         while current_provider is not None:
             # Record current provider as tried
@@ -203,7 +205,7 @@ class RetryHandler:
             
             # Try to switch to the next provider
             next_provider = await self._get_next_untried_provider(
-                candidates, tried_providers
+                candidates, tried_providers, requested_model, current_provider, input_tokens
             )
             
             if next_provider is None:
@@ -230,16 +232,18 @@ class RetryHandler:
         requested_model: str,
         forward_stream_fn: Callable[[CandidateProvider], Any],
         *,
+        input_tokens: Optional[int] = None,
         on_failure_attempt: Callable[[AttemptRecord], Awaitable[None]] | None = None,
     ) -> Any:
         """
         Execute Streaming Request with Retry
-        
+
         Args:
             candidates: List of candidate providers
             requested_model: Requested model name
             forward_stream_fn: Streaming forwarding function
-            
+            input_tokens: Number of input tokens (for cost-based selection)
+
         Yields:
             tuple[bytes, ProviderResponse, CandidateProvider, int]: (Data chunk, Response info, Final Provider, Retry Count)
         """
@@ -257,7 +261,7 @@ class RetryHandler:
         last_provider: Optional[CandidateProvider] = None
         attempt_index = 0
 
-        current_provider = await self.strategy.select(candidates, requested_model)
+        current_provider = await self.strategy.select(candidates, requested_model, input_tokens)
         
         while current_provider is not None:
             tried_providers.add(current_provider.provider_id)
@@ -382,7 +386,7 @@ class RetryHandler:
                         break
             
             next_provider = await self._get_next_untried_provider(
-                candidates, tried_providers
+                candidates, tried_providers, requested_model, current_provider, input_tokens
             )
             if next_provider is None:
                 break
@@ -398,18 +402,32 @@ class RetryHandler:
         self,
         candidates: list[CandidateProvider],
         tried_providers: set[int],
+        requested_model: str,
+        current_provider: CandidateProvider,
+        input_tokens: Optional[int] = None,
     ) -> Optional[CandidateProvider]:
         """
-        Get next untried provider
-        
+        Get next untried provider using the selection strategy
+
         Args:
             candidates: List of candidate providers
             tried_providers: Set of tried provider IDs
-        
+            requested_model: Requested model name
+            current_provider: Current provider
+            input_tokens: Number of input tokens (for cost-based selection)
+
         Returns:
             Optional[CandidateProvider]: Next provider
         """
-        for candidate in candidates:
-            if candidate.provider_id not in tried_providers:
-                return candidate
-        return None
+        # Use the strategy to get the next provider
+        next_provider = await self.strategy.get_next(
+            candidates, requested_model, current_provider, input_tokens
+        )
+
+        # Keep trying until we find an untried provider or run out of options
+        while next_provider is not None and next_provider.provider_id in tried_providers:
+            next_provider = await self.strategy.get_next(
+                candidates, requested_model, next_provider, input_tokens
+            )
+
+        return next_provider
