@@ -44,7 +44,6 @@ export function ModelList({
           <TableHead>Requested Model Name</TableHead>
           <TableHead>Strategy</TableHead>
           <TableHead>Provider Count</TableHead>
-          <TableHead>Matching Rules</TableHead>
           <TableHead>Status</TableHead>
           <TableHead>Updated At</TableHead>
           <TableHead className="text-right">Actions</TableHead>
@@ -65,15 +64,6 @@ export function ModelList({
               </TableCell>
               <TableCell>
                 <Badge variant="secondary">{model.provider_count || 0}</Badge>
-              </TableCell>
-              <TableCell>
-                {model.matching_rules ? (
-                  <Badge variant="outline" className="text-blue-600">
-                    Configured
-                  </Badge>
-                ) : (
-                  <span className="text-muted-foreground">-</span>
-                )}
               </TableCell>
               <TableCell>
                 <Badge className={status.className}>{status.text}</Badge>

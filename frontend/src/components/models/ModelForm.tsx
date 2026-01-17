@@ -25,12 +25,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { RuleBuilder } from '@/components/common';
 import {
   ModelMapping,
   ModelMappingCreate,
   ModelMappingUpdate,
-  RuleSet,
   SelectionStrategy
 } from '@/types';
 import { isValidModelName } from '@/lib/utils';
@@ -52,7 +50,6 @@ interface ModelFormProps {
 interface FormData {
   requested_model: string;
   strategy: SelectionStrategy;
-  matching_rules: RuleSet | null;
   is_active: boolean;
   input_price: string;
   output_price: string;
@@ -84,7 +81,6 @@ export function ModelForm({
     defaultValues: {
       requested_model: '',
       strategy: 'round_robin',
-      matching_rules: null,
       is_active: true,
       input_price: '',
       output_price: '',
@@ -99,7 +95,6 @@ export function ModelForm({
       reset({
         requested_model: model.requested_model,
         strategy: model.strategy,
-        matching_rules: model.matching_rules || null,
         is_active: model.is_active,
         input_price:
           model.input_price === null || model.input_price === undefined
@@ -114,7 +109,6 @@ export function ModelForm({
       reset({
         requested_model: '',
         strategy: 'round_robin',
-        matching_rules: null,
         is_active: true,
         input_price: '',
         output_price: '',
@@ -128,14 +122,11 @@ export function ModelForm({
       strategy: data.strategy,
       is_active: data.is_active,
     };
-    
+
     // requested_model required on creation
     if (!isEdit) {
       (submitData as ModelMappingCreate).requested_model = data.requested_model;
     }
-    
-    // Assign rules directly
-    submitData.matching_rules = data.matching_rules || undefined;
 
     // Preserve existing capabilities on edit (field hidden in UI)
     if (isEdit && model?.capabilities) {
@@ -146,7 +137,7 @@ export function ModelForm({
     const outputPrice = data.output_price.trim();
     submitData.input_price = inputPrice ? Number(inputPrice) : null;
     submitData.output_price = outputPrice ? Number(outputPrice) : null;
-    
+
     onSubmit(submitData);
   };
 
@@ -218,21 +209,6 @@ export function ModelForm({
             <p className="mt-2 text-xs text-muted-foreground">
               Used as model fallback price when no provider override exists; empty means unconfigured.
             </p>
-          </div>
-
-          {/* Matching Rules */}
-          <div className="space-y-2">
-            <Label>Matching Rules (Beta)</Label>
-            <Controller
-              name="matching_rules"
-              control={control}
-              render={({ field }) => (
-                <RuleBuilder
-                  value={field.value || undefined}
-                  onChange={field.onChange}
-                />
-              )}
-            />
           </div>
 
           {/* Strategy */}

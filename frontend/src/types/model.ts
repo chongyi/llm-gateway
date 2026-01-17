@@ -13,7 +13,6 @@ export type SelectionStrategy = 'round_robin' | 'cost_first';
 export interface ModelMapping {
   requested_model: string;            // Primary Key
   strategy: SelectionStrategy;        // Selection strategy
-  matching_rules?: RuleSet | null;    // Model level rules
   capabilities?: Record<string, unknown>; // Capabilities description
   is_active: boolean;
   // Pricing (USD per 1,000,000 tokens)
@@ -58,7 +57,6 @@ export interface ModelMappingProvider {
 export interface ModelMappingCreate {
   requested_model: string;
   strategy?: SelectionStrategy;
-  matching_rules?: RuleSet;
   capabilities?: Record<string, unknown>;
   is_active?: boolean;
   input_price?: number | null;
@@ -68,7 +66,6 @@ export interface ModelMappingCreate {
 /** Update Model Mapping Request */
 export interface ModelMappingUpdate {
   strategy?: SelectionStrategy;
-  matching_rules?: RuleSet | null;
   capabilities?: Record<string, unknown>;
   is_active?: boolean;
   input_price?: number | null;
