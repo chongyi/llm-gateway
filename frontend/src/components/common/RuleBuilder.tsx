@@ -30,22 +30,16 @@ interface RuleBuilderProps {
 
 /** Supported Fields */
 const FIELDS = [
-  // Common Fields
-  { value: 'model', label: '📝 Model Name' },
-
   // Request Headers (User-defined)
   { value: 'custom_header', label: '🔖 Request Header (Custom)' },
+  // Token Usage
+  { value: 'token_usage.input_tokens', label: '📥 Token Usage: input_tokens' },
 
   // Request Body
   { value: 'body.temperature', label: '🌡️ Body: temperature' },
   { value: 'body.max_tokens', label: '📊 Body: max_tokens' },
   { value: 'body.top_p', label: '🎯 Body: top_p' },
   { value: 'body.stream', label: '🌊 Body: stream' },
-
-  // Token Usage
-  { value: 'token_usage.input_tokens', label: '📥 Token Usage: input_tokens' },
-  { value: 'token_usage.output_tokens', label: '📤 Token Usage: output_tokens' },
-  { value: 'token_usage.total_tokens', label: '📊 Token Usage: total_tokens' },
 
   // Custom Field Path
   { value: 'custom', label: '✏️ Custom Field Path' },
