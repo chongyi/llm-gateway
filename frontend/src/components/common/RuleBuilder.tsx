@@ -28,32 +28,27 @@ interface RuleBuilderProps {
   disabled?: boolean;
 }
 
-/** Supported Fields - Organized by category */
+/** Supported Fields */
 const FIELDS = [
   // Common Fields
-  { value: 'model', label: '📝 Model Name', category: 'Common' },
+  { value: 'model', label: '📝 Model Name' },
 
-  // Request Headers
-  { value: 'headers.x-priority', label: '🔖 Header: x-priority', category: 'Headers' },
-  { value: 'headers.x-user-id', label: '👤 Header: x-user-id', category: 'Headers' },
-  { value: 'headers.x-api-key', label: '🔑 Header: x-api-key', category: 'Headers' },
-  { value: 'headers.authorization', label: '🔐 Header: authorization', category: 'Headers' },
-  { value: 'headers.content-type', label: '📄 Header: content-type', category: 'Headers' },
-  { value: 'headers.user-agent', label: '🌐 Header: user-agent', category: 'Headers' },
+  // Request Headers (User-defined)
+  { value: 'custom_header', label: '🔖 Request Header (Custom)' },
 
   // Request Body
-  { value: 'body.temperature', label: '🌡️ Temperature', category: 'Body' },
-  { value: 'body.max_tokens', label: '📊 Max Tokens', category: 'Body' },
-  { value: 'body.top_p', label: '🎯 Top P', category: 'Body' },
-  { value: 'body.stream', label: '🌊 Stream Mode', category: 'Body' },
+  { value: 'body.temperature', label: '🌡️ Body: temperature' },
+  { value: 'body.max_tokens', label: '📊 Body: max_tokens' },
+  { value: 'body.top_p', label: '🎯 Body: top_p' },
+  { value: 'body.stream', label: '🌊 Body: stream' },
 
   // Token Usage
-  { value: 'token_usage.input_tokens', label: '📥 Input Tokens', category: 'Usage' },
-  { value: 'token_usage.output_tokens', label: '📤 Output Tokens', category: 'Usage' },
-  { value: 'token_usage.total_tokens', label: '📊 Total Tokens', category: 'Usage' },
+  { value: 'token_usage.input_tokens', label: '📥 Token Usage: input_tokens' },
+  { value: 'token_usage.output_tokens', label: '📤 Token Usage: output_tokens' },
+  { value: 'token_usage.total_tokens', label: '📊 Token Usage: total_tokens' },
 
-  // Custom
-  { value: 'custom', label: '✏️ Custom Field Path', category: 'Custom' },
+  // Custom Field Path
+  { value: 'custom', label: '✏️ Custom Field Path' },
 ];
 
 /** Supported Operators */
@@ -153,8 +148,19 @@ export function RuleBuilder({ value, onChange, disabled }: RuleBuilderProps) {
         {/* Rule List */}
         <div className="space-y-3">
           {ruleSet.rules.map((rule, index) => {
-            const isCustomField = !FIELDS.some(f => f.value === rule.field && f.value !== 'custom');
-            const selectedFieldType = isCustomField ? 'custom' : rule.field;
+            // Determine field type
+            const isCustomHeader = rule.field.startsWith('headers.') && !FIELDS.some(f => f.value === rule.field);
+            const isCustomField = !FIELDS.some(f => f.value === rule.field) && !isCustomHeader;
+
+            let selectedFieldType = rule.field;
+            if (isCustomHeader) {
+              selectedFieldType = 'custom_header';
+            } else if (isCustomField) {
+              selectedFieldType = 'custom';
+            }
+
+            // Extract header name (without "headers." prefix)
+            const headerName = isCustomHeader ? rule.field.replace(/^headers\./, '') : '';
 
             return (
               <div key={index} className="rounded-lg border bg-muted/30 p-3 space-y-2">
@@ -164,12 +170,14 @@ export function RuleBuilder({ value, onChange, disabled }: RuleBuilderProps) {
                     <Select
                       value={selectedFieldType}
                       onValueChange={(val) => {
-                        if (val === 'custom') {
-                          // Switch to custom mode - keep current field if it's already custom
-                          if (!isCustomField) {
-                            updateRule(index, { ...rule, field: '' });
-                          }
+                        if (val === 'custom_header') {
+                          // Switch to custom header mode
+                          updateRule(index, { ...rule, field: 'headers.' });
+                        } else if (val === 'custom') {
+                          // Switch to custom field mode
+                          updateRule(index, { ...rule, field: '' });
                         } else {
+                          // Use predefined field
                           updateRule(index, { ...rule, field: val });
                         }
                       }}
@@ -238,6 +246,26 @@ export function RuleBuilder({ value, onChange, disabled }: RuleBuilderProps) {
                   </div>
                 </div>
 
+                {/* Custom Header Name Input */}
+                {isCustomHeader && (
+                  <div className="space-y-1.5 pl-1">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span>🔖</span>
+                      <span className="font-medium">Header Name:</span>
+                    </div>
+                    <Input
+                      placeholder="e.g., x-api-key, x-user-id, authorization, content-type"
+                      value={headerName}
+                      onChange={(e) => updateRule(index, { ...rule, field: `headers.${e.target.value}` })}
+                      disabled={disabled}
+                      className="font-mono text-sm"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      💡 Enter the header name only. Examples: <code className="px-1 py-0.5 rounded bg-muted">x-api-key</code>, <code className="px-1 py-0.5 rounded bg-muted">authorization</code>, <code className="px-1 py-0.5 rounded bg-muted">x-custom-header</code>
+                    </p>
+                  </div>
+                )}
+
                 {/* Custom Field Path Input */}
                 {isCustomField && (
                   <div className="space-y-1.5 pl-1">
@@ -246,14 +274,14 @@ export function RuleBuilder({ value, onChange, disabled }: RuleBuilderProps) {
                       <span className="font-medium">Custom Field Path:</span>
                     </div>
                     <Input
-                      placeholder="e.g., headers.x-custom-header, body.user.id, metadata.region"
+                      placeholder="e.g., body.user.id, metadata.region, context.session_id"
                       value={rule.field}
                       onChange={(e) => updateRule(index, { ...rule, field: e.target.value })}
                       disabled={disabled}
                       className="font-mono text-sm"
                     />
                     <p className="text-xs text-muted-foreground">
-                      💡 Use dot notation to access nested fields. Examples: <code className="px-1 py-0.5 rounded bg-muted">headers.x-custom</code>, <code className="px-1 py-0.5 rounded bg-muted">body.options.language</code>
+                      💡 Use dot notation to access nested fields. Examples: <code className="px-1 py-0.5 rounded bg-muted">body.user.id</code>, <code className="px-1 py-0.5 rounded bg-muted">metadata.region</code>
                     </p>
                   </div>
                 )}
