@@ -28,13 +28,32 @@ interface RuleBuilderProps {
   disabled?: boolean;
 }
 
-/** Supported Fields */
+/** Supported Fields - Organized by category */
 const FIELDS = [
-  { value: 'model', label: 'Model Name (model)' },
-  { value: 'headers.x-priority', label: 'Header: Priority (headers.x-priority)' },
-  { value: 'body.temperature', label: 'Temperature (body.temperature)' },
-  { value: 'token_usage.input_tokens', label: 'Input Tokens (token_usage.input_tokens)' },
-  { value: 'custom', label: 'Custom Path' },
+  // Common Fields
+  { value: 'model', label: '📝 Model Name', category: 'Common' },
+
+  // Request Headers
+  { value: 'headers.x-priority', label: '🔖 Header: x-priority', category: 'Headers' },
+  { value: 'headers.x-user-id', label: '👤 Header: x-user-id', category: 'Headers' },
+  { value: 'headers.x-api-key', label: '🔑 Header: x-api-key', category: 'Headers' },
+  { value: 'headers.authorization', label: '🔐 Header: authorization', category: 'Headers' },
+  { value: 'headers.content-type', label: '📄 Header: content-type', category: 'Headers' },
+  { value: 'headers.user-agent', label: '🌐 Header: user-agent', category: 'Headers' },
+
+  // Request Body
+  { value: 'body.temperature', label: '🌡️ Temperature', category: 'Body' },
+  { value: 'body.max_tokens', label: '📊 Max Tokens', category: 'Body' },
+  { value: 'body.top_p', label: '🎯 Top P', category: 'Body' },
+  { value: 'body.stream', label: '🌊 Stream Mode', category: 'Body' },
+
+  // Token Usage
+  { value: 'token_usage.input_tokens', label: '📥 Input Tokens', category: 'Usage' },
+  { value: 'token_usage.output_tokens', label: '📤 Output Tokens', category: 'Usage' },
+  { value: 'token_usage.total_tokens', label: '📊 Total Tokens', category: 'Usage' },
+
+  // Custom
+  { value: 'custom', label: '✏️ Custom Field Path', category: 'Custom' },
 ];
 
 /** Supported Operators */
@@ -90,6 +109,16 @@ export function RuleBuilder({ value, onChange, disabled }: RuleBuilderProps) {
   return (
     <Card className="p-4">
       <div className="space-y-4">
+        {/* Header */}
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold">🎯 Matching Rules</span>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Configure conditions to match specific requests. Leave empty to match all requests.
+          </p>
+        </div>
+
         {/* Logic Selection */}
         <div className="flex items-center gap-4">
           <span className="text-sm font-medium">Match Logic:</span>
@@ -122,83 +151,115 @@ export function RuleBuilder({ value, onChange, disabled }: RuleBuilderProps) {
         </div>
 
         {/* Rule List */}
-        <div className="space-y-2">
-          {ruleSet.rules.map((rule, index) => (
-            <div key={index} className="flex items-start gap-2">
-              <div className="grid flex-1 gap-2 md:grid-cols-3">
-                {/* Field Selection */}
-                <Select
-                  value={FIELDS.some(f => f.value === rule.field) ? rule.field : 'custom'}
-                  onValueChange={(val) => {
-                    if (val !== 'custom') {
-                      updateRule(index, { ...rule, field: val });
-                    }
-                  }}
-                  disabled={disabled}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select Field" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {FIELDS.map((f) => (
-                      <SelectItem key={f.value} value={f.value}>
-                        {f.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+        <div className="space-y-3">
+          {ruleSet.rules.map((rule, index) => {
+            const isCustomField = !FIELDS.some(f => f.value === rule.field && f.value !== 'custom');
+            const selectedFieldType = isCustomField ? 'custom' : rule.field;
 
-                {/* Operator Selection */}
-                <Select
-                  value={rule.operator}
-                  onValueChange={(val) => updateRule(index, { ...rule, operator: val as RuleOperator })}
-                  disabled={disabled}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select Operator" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {OPERATORS.map((op) => (
-                      <SelectItem key={op.value} value={op.value}>
-                        {op.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                {/* Value Input */}
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Match Value"
-                    value={String(rule.value)}
-                    onChange={(e) => {
-                      // Try to convert to number or boolean
-                      let val: string | number | boolean = e.target.value;
-                      if (!isNaN(Number(val)) && val !== '') {
-                        val = Number(val);
-                      } else if (val === 'true') {
-                        val = true;
-                      } else if (val === 'false') {
-                        val = false;
-                      }
-                      updateRule(index, { ...rule, value: val });
-                    }}
-                    disabled={disabled}
-                  />
-                  {!disabled && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => removeRule(index)}
-                      className="text-muted-foreground hover:text-destructive"
+            return (
+              <div key={index} className="rounded-lg border bg-muted/30 p-3 space-y-2">
+                <div className="flex items-start gap-2">
+                  <div className="grid flex-1 gap-2 md:grid-cols-3">
+                    {/* Field Selection */}
+                    <Select
+                      value={selectedFieldType}
+                      onValueChange={(val) => {
+                        if (val === 'custom') {
+                          // Switch to custom mode - keep current field if it's already custom
+                          if (!isCustomField) {
+                            updateRule(index, { ...rule, field: '' });
+                          }
+                        } else {
+                          updateRule(index, { ...rule, field: val });
+                        }
+                      }}
+                      disabled={disabled}
                     >
-                      <X className="h-4 w-4" suppressHydrationWarning />
-                    </Button>
-                  )}
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select Field" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-[300px]">
+                        {FIELDS.map((f) => (
+                          <SelectItem key={f.value} value={f.value}>
+                            {f.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    {/* Operator Selection */}
+                    <Select
+                      value={rule.operator}
+                      onValueChange={(val) => updateRule(index, { ...rule, operator: val as RuleOperator })}
+                      disabled={disabled}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select Operator" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {OPERATORS.map((op) => (
+                          <SelectItem key={op.value} value={op.value}>
+                            {op.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    {/* Value Input */}
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Match Value"
+                        value={String(rule.value)}
+                        onChange={(e) => {
+                          // Try to convert to number or boolean
+                          let val: string | number | boolean = e.target.value;
+                          if (!isNaN(Number(val)) && val !== '') {
+                            val = Number(val);
+                          } else if (val === 'true') {
+                            val = true;
+                          } else if (val === 'false') {
+                            val = false;
+                          }
+                          updateRule(index, { ...rule, value: val });
+                        }}
+                        disabled={disabled}
+                      />
+                      {!disabled && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeRule(index)}
+                          className="text-muted-foreground hover:text-destructive"
+                        >
+                          <X className="h-4 w-4" suppressHydrationWarning />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
                 </div>
+
+                {/* Custom Field Path Input */}
+                {isCustomField && (
+                  <div className="space-y-1.5 pl-1">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span>✏️</span>
+                      <span className="font-medium">Custom Field Path:</span>
+                    </div>
+                    <Input
+                      placeholder="e.g., headers.x-custom-header, body.user.id, metadata.region"
+                      value={rule.field}
+                      onChange={(e) => updateRule(index, { ...rule, field: e.target.value })}
+                      disabled={disabled}
+                      className="font-mono text-sm"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      💡 Use dot notation to access nested fields. Examples: <code className="px-1 py-0.5 rounded bg-muted">headers.x-custom</code>, <code className="px-1 py-0.5 rounded bg-muted">body.options.language</code>
+                    </p>
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
 
           {/* Empty State */}
           {ruleSet.rules.length === 0 && (
