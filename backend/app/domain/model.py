@@ -40,9 +40,7 @@ class ModelMappingBase(BaseModel):
 
 class ModelMappingCreate(ModelMappingBase):
     """Create Model Mapping Request Model"""
-    
-    # Model Level Matching Rules
-    matching_rules: Optional[dict[str, Any]] = Field(None, description="Matching Rules")
+
     # Model Capabilities Description
     capabilities: Optional[dict[str, Any]] = Field(None, description="Model Capabilities")
     # Is Active
@@ -56,7 +54,6 @@ class ModelMappingUpdate(BaseModel):
     """Update Model Mapping Request Model"""
 
     strategy: Optional[SelectionStrategyType] = None
-    matching_rules: Optional[dict[str, Any]] = None
     capabilities: Optional[dict[str, Any]] = None
     is_active: Optional[bool] = None
     input_price: Optional[float] = None
@@ -65,15 +62,14 @@ class ModelMappingUpdate(BaseModel):
 
 class ModelMapping(ModelMappingBase):
     """Model Mapping Complete Model"""
-    
-    matching_rules: Optional[dict[str, Any]] = None
+
     capabilities: Optional[dict[str, Any]] = None
     is_active: bool = True
     input_price: Optional[float] = None
     output_price: Optional[float] = None
     created_at: datetime
     updated_at: datetime
-    
+
     class Config:
         from_attributes = True
 

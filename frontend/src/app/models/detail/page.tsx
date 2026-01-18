@@ -228,17 +228,6 @@ function ModelDetailContent() {
         </CardContent>
       </Card>
 
-      {model.matching_rules && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Matching Rules</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <JsonViewer data={model.matching_rules} />
-          </CardContent>
-        </Card>
-      )}
-
       {/* {model.capabilities && (
         <Card>
           <CardHeader>
