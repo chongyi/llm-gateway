@@ -53,3 +53,14 @@ jobs:
           ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.result }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
+
+    - name: Notify remote endpoint
+      if: ${{ secrets.NOTIFICATION_REMOTE_URL != '' }}
+      run: |
+        curl -X POST "${{ secrets.NOTIFICATION_REMOTE_URL }}" \
+          -H "Content-Type: application/json" \
+          -d '{
+                "branch": "${{ github.ref_name }}",
+                "action": "${{ github.event_name }}",
+                "repo": "${{ github.repository }}"
+              }'
