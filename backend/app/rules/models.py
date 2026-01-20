@@ -113,6 +113,8 @@ class CandidateProvider:
     api_key: Optional[str]
     target_model: str
     extra_headers: Optional[dict[str, str]] = None
+    proxy_enabled: bool = False
+    proxy_url: Optional[str] = None
     priority: int = 0
     weight: int = 1
     billing_mode: Optional[str] = None

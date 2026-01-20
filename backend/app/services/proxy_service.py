@@ -25,6 +25,7 @@ from app.common.costs import calculate_cost_from_billing, resolve_billing
 from app.common.utils import generate_trace_id
 from app.common.time import utc_now
 from app.common.usage_extractor import extract_output_tokens
+from app.common.proxy import build_proxy_config
 from app.domain.log import RequestLogCreate
 from app.domain.model import ModelMapping, ModelMappingProviderResponse
 from app.domain.provider import Provider
@@ -313,6 +314,10 @@ class ProxyService:
                     target_model=candidate.target_model,
                 )
                 same_protocol = normalize_protocol(request_protocol) == normalize_protocol(candidate.protocol)
+                proxy_config = build_proxy_config(
+                    candidate.proxy_enabled,
+                    candidate.proxy_url,
+                )
                 return await client.forward(
                     base_url=candidate.base_url,
                     api_key=candidate.api_key,
@@ -323,6 +328,7 @@ class ProxyService:
                     target_model=candidate.target_model,
                     response_mode="parsed" if force_parse_response else ("raw" if same_protocol else "parsed"),
                     extra_headers=candidate.extra_headers,
+                    proxy_config=proxy_config,
                 )
             except Exception as e:
                 error_msg = str(e)
@@ -532,6 +538,10 @@ class ProxyService:
                 )
                 return error_gen(error_msg)
 
+            proxy_config = build_proxy_config(
+                candidate.proxy_enabled,
+                candidate.proxy_url,
+            )
             upstream_gen = client.forward_stream(
                 base_url=candidate.base_url,
                 api_key=candidate.api_key,
@@ -541,6 +551,7 @@ class ProxyService:
                 body=supplier_body,
                 target_model=candidate.target_model,
                 extra_headers=candidate.extra_headers,
+                proxy_config=proxy_config,
             )
 
             async def wrapped() -> AsyncGenerator[tuple[bytes, ProviderResponse], None]:

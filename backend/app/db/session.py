@@ -122,3 +122,10 @@ def _run_migrations(sync_conn) -> None:
             "price_source": "price_source VARCHAR(50)",
         },
     )
+    ensure_columns(
+        "service_providers",
+        {
+            "proxy_enabled": "proxy_enabled BOOLEAN DEFAULT 0",
+            "proxy_url": "proxy_url TEXT",
+        },
+    )

@@ -54,6 +54,10 @@ class ServiceProvider(Base):
     api_key: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # Extra Headers (JSON format)
     extra_headers: Mapped[Optional[dict]] = mapped_column(SQLiteJSON, nullable=True)
+    # Proxy Enabled
+    proxy_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Proxy URL (schema://auth@host:port)
+    proxy_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # Is Active
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     # Creation Time

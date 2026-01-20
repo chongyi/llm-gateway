@@ -49,6 +49,8 @@ class SQLAlchemyProviderRepository(ProviderRepository):
             api_type=entity.api_type,
             api_key=entity.api_key,
             extra_headers=entity.extra_headers,
+            proxy_enabled=entity.proxy_enabled,
+            proxy_url=entity.proxy_url,
             is_active=entity.is_active,
             created_at=ensure_utc(entity.created_at),
             updated_at=ensure_utc(entity.updated_at),
@@ -63,6 +65,8 @@ class SQLAlchemyProviderRepository(ProviderRepository):
             api_type=data.api_type,
             api_key=data.api_key,
             extra_headers=data.extra_headers,
+            proxy_enabled=data.proxy_enabled,
+            proxy_url=data.proxy_url,
             is_active=data.is_active,
         )
         self.session.add(entity)

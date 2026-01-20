@@ -85,6 +85,7 @@ class AnthropicClient(ProviderClient):
         target_model: str,
         response_mode: str = "parsed",
         extra_headers: Optional[dict[str, str]] = None,
+        proxy_config: Optional[dict[str, str]] = None,
     ) -> ProviderResponse:
         """
         Forward request to Anthropic-compatible provider
@@ -125,7 +126,7 @@ class AnthropicClient(ProviderClient):
         timer = Timer().start()
         
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with httpx.AsyncClient(timeout=self.timeout, proxies=proxy_config) as client:
                 response = await client.request(
                     method=method,
                     url=url,
@@ -191,6 +192,7 @@ class AnthropicClient(ProviderClient):
         body: dict[str, Any],
         target_model: str,
         extra_headers: Optional[dict[str, str]] = None,
+        proxy_config: Optional[dict[str, str]] = None,
     ) -> AsyncGenerator[tuple[bytes, ProviderResponse], None]:
         """
         Forward streaming request to Anthropic-compatible provider
@@ -231,7 +233,7 @@ class AnthropicClient(ProviderClient):
         first_chunk = True
         
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with httpx.AsyncClient(timeout=self.timeout, proxies=proxy_config) as client:
                 async with client.stream(
                     method=method,
                     url=url,
