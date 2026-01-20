@@ -765,12 +765,24 @@ class ProxyService:
                 protocol=protocol,
                 model=requested_model,
             )
+            raw_stream_chunks: list[bytes] = []
             stream_error: Optional[str] = None
+
+            def record_stream_chunk(chunk: Any) -> None:
+                if not chunk:
+                    return
+                if isinstance(chunk, (bytes, bytearray)):
+                    raw_stream_chunks.append(bytes(chunk))
+                    return
+                raw_stream_chunks.append(str(chunk).encode("utf-8"))
+
             try:
                 usage_acc.feed(first_chunk)
+                record_stream_chunk(first_chunk)
                 yield first_chunk
                 async for chunk, _, _, _ in stream_gen:
                     usage_acc.feed(chunk)
+                    record_stream_chunk(chunk)
                     yield chunk
             except asyncio.CancelledError:
                 stream_error = "client_disconnected"
@@ -786,7 +798,7 @@ class ProxyService:
                     total_time_ms = int((time.monotonic() - start_monotonic) * 1000)
 
                 # 10. Record log (after stream ends)
-                # Note: Streaming requests cannot stably obtain the full response body, here only record output preview (truncated)
+                # Record the raw stream response (SSE) plus a reconstructed summary in one field.
                 final_provider_id = final_provider.provider_id if final_provider else None
                 provider_mapping = (
                     provider_mapping_by_id.get(final_provider_id) if final_provider_id is not None else None
@@ -805,6 +817,28 @@ class ProxyService:
                     billing=billing,
                     input_tokens=input_tokens,
                     output_tokens=usage_result.output_tokens,
+                )
+                raw_stream_text = (
+                    b"".join(raw_stream_chunks).decode("utf-8", errors="replace")
+                    if raw_stream_chunks
+                    else ""
+                )
+                reconstructed_body = json.dumps(
+                    {
+                        "type": "stream_reconstruction",
+                        "protocol": protocol,
+                        "output_text": usage_result.output_text,
+                        "upstream_reported_output_tokens": usage_result.upstream_reported_output_tokens,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                combined_body = (
+                    "Original:\n---\n"
+                    + raw_stream_text
+                    + "\n---\n\nFinal Response (After reconstruction):\n---\n"
+                    + reconstructed_body
+                    + "\n---"
                 )
                 log_data = RequestLogCreate(
                     request_time=request_time,
@@ -826,18 +860,8 @@ class ProxyService:
                     price_source=billing.price_source,
                     request_headers=sanitize_headers(headers),
                     request_body=sanitized_body,
-
+                    response_body=combined_body if raw_stream_text or reconstructed_body else None,
                     response_status=initial_response.status_code,
-                    response_body=json.dumps(
-                        {
-                            "type": "stream",
-                            "protocol": protocol,
-                            "output_preview": usage_result.output_preview,
-                            "output_preview_truncated": usage_result.output_preview_truncated,
-                            "upstream_reported_output_tokens": usage_result.upstream_reported_output_tokens,
-                        },
-                        ensure_ascii=False,
-                    ),
                     error_info=initial_response.error or stream_error,
                     trace_id=trace_id,
                     is_stream=True,
