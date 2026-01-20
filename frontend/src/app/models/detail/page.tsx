@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/table';
 import { ArrowLeft, Plus, Pencil, Trash2 } from 'lucide-react';
 import { ModelProviderForm } from '@/components/models';
-import { JsonViewer, ConfirmDialog, LoadingSpinner, ErrorState } from '@/components/common';
+import { ConfirmDialog, LoadingSpinner, ErrorState } from '@/components/common';
 import {
   useModel,
   useProviders,
@@ -51,13 +51,36 @@ function formatPrice(value: number | null | undefined) {
   return formatUsd(value);
 }
 
-function formatBilling(mapping: ModelMappingProvider) {
+function formatUsdOrFree(value: number) {
+  return value === 0 ? 'free' : formatUsd(value);
+}
+
+function resolveInheritedPrice(
+  override: number | null | undefined,
+  fallback: number | null | undefined
+) {
+  if (override !== null && override !== undefined) return override;
+  if (fallback !== null && fallback !== undefined) return fallback;
+  return 0;
+}
+
+function formatInheritedPrice(
+  override: number | null | undefined,
+  fallback: number | null | undefined
+) {
+  return formatUsdOrFree(resolveInheritedPrice(override, fallback));
+}
+
+function formatBilling(
+  mapping: ModelMappingProvider,
+  fallbackPrices?: { input_price?: number | null; output_price?: number | null }
+) {
   const mode = mapping.billing_mode ?? 'token_flat';
   if (mode === 'per_request') {
     const price =
       mapping.per_request_price === null || mapping.per_request_price === undefined
         ? '-'
-        : formatUsd(mapping.per_request_price);
+        : formatUsdOrFree(mapping.per_request_price);
     return `Per request: ${price}`;
   }
   if (mode === 'token_tiered') {
@@ -70,13 +93,13 @@ function formatBilling(mapping: ModelMappingProvider) {
           t.max_input_tokens === null || t.max_input_tokens === undefined
             ? '∞'
             : String(t.max_input_tokens);
-        return `≤${max}: In ${formatUsd(t.input_price)} / Out ${formatUsd(t.output_price)}`;
+        return `≤${max}: In ${formatUsdOrFree(t.input_price)} / Out ${formatUsdOrFree(t.output_price)}`;
       })
       .join(', ');
     return `Tiered: ${preview}${tiers.length > 2 ? ` (+${tiers.length - 2})` : ''}`;
   }
   // token_flat (default)
-  return `Token: In ${formatPrice(mapping.input_price)} / Out ${formatPrice(mapping.output_price)} (per 1M)`;
+  return `Token: In ${formatInheritedPrice(mapping.input_price, fallbackPrices?.input_price)} / Out ${formatInheritedPrice(mapping.output_price, fallbackPrices?.output_price)} (per 1M)`;
 }
 
 export default function ModelDetailPage() {
@@ -288,7 +311,12 @@ function ModelDetailContent() {
                         <code className="text-sm">{mapping.target_model_name}</code>
                       </TableCell>
                       <TableCell className="text-sm">
-                        <span className="font-mono">{formatBilling(mapping)}</span>
+                        <span className="font-mono">
+                          {formatBilling(mapping, {
+                            input_price: model.input_price,
+                            output_price: model.output_price,
+                          })}
+                        </span>
                       </TableCell>
                       <TableCell>{mapping.priority}</TableCell>
                       <TableCell>{mapping.weight}</TableCell>
