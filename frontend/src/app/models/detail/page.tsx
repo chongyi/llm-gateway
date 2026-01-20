@@ -34,7 +34,7 @@ import {
   ModelMappingProviderCreate,
   ModelMappingProviderUpdate,
 } from '@/types';
-import { formatDateTime, getActiveStatus, formatUsd } from '@/lib/utils';
+import { formatDateTime, getActiveStatus, formatUsdCompact } from '@/lib/utils';
 import { ProtocolType } from '@/types/provider';
 
 function protocolLabel(protocol: ProtocolType) {
@@ -48,11 +48,11 @@ function protocolLabel(protocol: ProtocolType) {
 
 function formatPrice(value: number | null | undefined) {
   if (value === null || value === undefined) return '-';
-  return formatUsd(value);
+  return formatUsdCompact(value);
 }
 
 function formatUsdOrFree(value: number) {
-  return value === 0 ? 'free' : formatUsd(value);
+  return value === 0 ? 'free' : formatUsdCompact(value);
 }
 
 function isAllZero(values: number[]) {
@@ -78,7 +78,7 @@ function formatBilling(
       return 'Per request: -';
     }
     if (mapping.per_request_price === 0) return 'free';
-    return `Per request: ${formatUsd(mapping.per_request_price)}`;
+    return `Per request: ${formatUsdCompact(mapping.per_request_price)}`;
   }
   if (mode === 'token_tiered') {
     const tiers = mapping.tiered_pricing ?? [];
@@ -91,7 +91,7 @@ function formatBilling(
           t.max_input_tokens === null || t.max_input_tokens === undefined
             ? '∞'
             : String(t.max_input_tokens);
-        return `≤${max}: In ${formatUsdOrFree(t.input_price)} / Out ${formatUsdOrFree(t.output_price)}`;
+        return `≤${max}: ${formatUsdOrFree(t.input_price)}/${formatUsdOrFree(t.output_price)}`;
       })
       .join(', ');
     return `Tiered: ${preview}${tiers.length > 2 ? ` (+${tiers.length - 2})` : ''}`;
@@ -100,7 +100,7 @@ function formatBilling(
   const effectiveInput = resolveInheritedPrice(mapping.input_price, fallbackPrices?.input_price);
   const effectiveOutput = resolveInheritedPrice(mapping.output_price, fallbackPrices?.output_price);
   if (effectiveInput === 0 && effectiveOutput === 0) return 'free';
-  return `Token: In ${formatUsdOrFree(effectiveInput)} / Out ${formatUsdOrFree(effectiveOutput)} (per 1M)`;
+  return `Token: ${formatUsdOrFree(effectiveInput)}/${formatUsdOrFree(effectiveOutput)} (per 1M)`;
 }
 
 export default function ModelDetailPage() {
@@ -250,9 +250,9 @@ function ModelDetailContent() {
               <div className="md:col-span-2">
                 <p className="text-sm text-muted-foreground">Pricing (USD / 1M tokens)</p>
                 <p className="text-sm">
-                  In: <span className="font-mono">{formatPrice(model.input_price)}</span>
+                  <span className="font-mono">{formatPrice(model.input_price)}</span>
                   <span className="mx-2 text-muted-foreground">/</span>
-                  Out: <span className="font-mono">{formatPrice(model.output_price)}</span>
+                  <span className="font-mono">{formatPrice(model.output_price)}</span>
                 </p>
               </div>
             )}

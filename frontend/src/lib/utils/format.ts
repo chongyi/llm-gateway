@@ -113,6 +113,16 @@ export function formatUsd(cost: number | null | undefined): string {
 }
 
 /**
+ * Format USD cost with 2 decimals
+ */
+export function formatUsdCompact(cost: number | null | undefined): string {
+  if (cost === null || cost === undefined) return '$0.00';
+  const num = Number(cost);
+  if (Number.isNaN(num)) return '$0.00';
+  return `$${num.toFixed(2)}`;
+}
+
+/**
  * Truncate string
  * @param str - Original string
  * @param maxLength - Maximum length
