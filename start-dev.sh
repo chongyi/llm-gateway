@@ -6,7 +6,7 @@ trap "trap - SIGINT SIGTERM EXIT; kill -- -$$" SIGINT SIGTERM EXIT
 
 (
   cd frontend
-  npm run dev
+  PORT=3000 npm run dev
 ) &
 
 (
