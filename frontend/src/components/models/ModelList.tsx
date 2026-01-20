@@ -17,12 +17,13 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Pencil, Server, Trash2 } from 'lucide-react';
-import { ModelMapping } from '@/types';
-import { formatDateTime, getActiveStatus } from '@/lib/utils';
+import { ModelMapping, ModelStats } from '@/types';
+import { formatDateTime, getActiveStatus, formatDuration } from '@/lib/utils';
 
 interface ModelListProps {
   /** Model mapping list data */
   models: ModelMapping[];
+  statsByModel?: Record<string, ModelStats>;
   /** Edit callback */
   onEdit: (model: ModelMapping) => void;
   /** Delete callback */
@@ -34,9 +35,15 @@ interface ModelListProps {
  */
 export function ModelList({
   models,
+  statsByModel,
   onEdit,
   onDelete,
 }: ModelListProps) {
+  const formatRate = (value: number | null | undefined) => {
+    if (value === null || value === undefined) return '-';
+    return `${(value * 100).toFixed(1)}%`;
+  };
+
   return (
     <Table>
       <TableHeader>
@@ -45,6 +52,9 @@ export function ModelList({
           <TableHead>Type</TableHead>
           <TableHead>Strategy</TableHead>
           <TableHead>Provider Count</TableHead>
+          <TableHead>Avg Response (7d)</TableHead>
+          <TableHead>Avg First Token (7d)</TableHead>
+          <TableHead>Success / Failure (7d)</TableHead>
           <TableHead>Status</TableHead>
           <TableHead>Updated At</TableHead>
           <TableHead className="text-right">Actions</TableHead>
@@ -53,6 +63,7 @@ export function ModelList({
       <TableBody>
         {models.map((model) => {
           const status = getActiveStatus(model.is_active);
+          const stats = statsByModel?.[model.requested_model];
           return (
             <TableRow key={model.requested_model}>
               <TableCell className="font-medium font-mono">
@@ -68,6 +79,15 @@ export function ModelList({
               </TableCell>
               <TableCell>
                 <Badge variant="secondary">{model.provider_count || 0}</Badge>
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                {formatDuration(stats?.avg_response_time_ms ?? null)}
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                {formatDuration(stats?.avg_first_byte_time_ms ?? null)}
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                {formatRate(stats?.success_rate)} / {formatRate(stats?.failure_rate)}
               </TableCell>
               <TableCell>
                 <Badge className={status.className}>{status.text}</Badge>

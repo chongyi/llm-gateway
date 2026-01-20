@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from app.api.deps import ModelServiceDep, require_admin_auth
+from app.api.deps import LogServiceDep, ModelServiceDep, require_admin_auth
 from app.common.errors import AppError
 from app.domain.model import (
     ModelMappingCreate,
@@ -21,6 +21,7 @@ from app.domain.model import (
     ModelMappingProviderResponse,
     ModelExport,
 )
+from app.domain.log import ModelStats, ModelProviderStats
 
 router = APIRouter(
     prefix="/admin",
@@ -108,6 +109,34 @@ async def list_models(
             page=page,
             page_size=page_size,
         )
+    except AppError as e:
+        return JSONResponse(content=e.to_dict(), status_code=e.status_code)
+
+
+@router.get("/models/stats", response_model=list[ModelStats])
+async def list_model_stats(
+    service: LogServiceDep,
+    requested_model: Optional[str] = Query(None, description="Filter by model name"),
+):
+    """
+    Get model stats based on logs for the last 7 days
+    """
+    try:
+        return await service.get_model_stats(requested_model=requested_model)
+    except AppError as e:
+        return JSONResponse(content=e.to_dict(), status_code=e.status_code)
+
+
+@router.get("/models/provider-stats", response_model=list[ModelProviderStats])
+async def list_model_provider_stats(
+    service: LogServiceDep,
+    requested_model: Optional[str] = Query(None, description="Filter by model name"),
+):
+    """
+    Get model-provider stats based on logs for the last 7 days
+    """
+    try:
+        return await service.get_model_provider_stats(requested_model=requested_model)
     except AppError as e:
         return JSONResponse(content=e.to_dict(), status_code=e.status_code)
 

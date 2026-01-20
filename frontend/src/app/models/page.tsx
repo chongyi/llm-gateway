@@ -13,12 +13,20 @@ import { ModelFilters, ModelFiltersState, ModelForm, ModelList } from '@/compone
 import { Pagination, ConfirmDialog, LoadingSpinner, ErrorState, EmptyState } from '@/components/common';
 import {
   useModels,
+  useModelStats,
   useCreateModel,
   useUpdateModel,
   useDeleteModel,
 } from '@/lib/hooks';
 import { exportModels, importModels } from '@/lib/api';
-import { ModelExport, ModelMapping, ModelMappingCreate, ModelMappingUpdate, ModelType, SelectionStrategy } from '@/types';
+import {
+  ModelExport,
+  ModelMapping,
+  ModelMappingCreate,
+  ModelMappingUpdate,
+  ModelType,
+  SelectionStrategy,
+} from '@/types';
 
 /**
  * Model Management Page Component
@@ -53,6 +61,7 @@ export default function ModelsPage() {
     strategy: filters.strategy === 'all' ? undefined : (filters.strategy as SelectionStrategy),
     is_active: filters.is_active === 'all' ? undefined : filters.is_active === 'active',
   });
+  const { data: statsData } = useModelStats();
 
   // Mutations
   const createMutation = useCreateModel();
@@ -226,6 +235,9 @@ export default function ModelsPage() {
             <>
               <ModelList
                 models={data.items}
+                statsByModel={Object.fromEntries(
+                  (statsData ?? []).map((stat) => [stat.requested_model, stat])
+                )}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
               />

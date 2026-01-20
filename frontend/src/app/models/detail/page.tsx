@@ -24,6 +24,8 @@ import { ModelProviderForm } from '@/components/models';
 import { ConfirmDialog, LoadingSpinner, ErrorState } from '@/components/common';
 import {
   useModel,
+  useModelStats,
+  useModelProviderStats,
   useProviders,
   useCreateModelProvider,
   useUpdateModelProvider,
@@ -33,8 +35,9 @@ import {
   ModelMappingProvider,
   ModelMappingProviderCreate,
   ModelMappingProviderUpdate,
+  ModelProviderStats,
 } from '@/types';
-import { formatDateTime, getActiveStatus, formatUsdCompact } from '@/lib/utils';
+import { formatDateTime, getActiveStatus, formatUsdCompact, formatDuration } from '@/lib/utils';
 import { ProtocolType } from '@/types/provider';
 
 function protocolLabel(protocol: ProtocolType) {
@@ -57,6 +60,11 @@ function formatUsdOrFree(value: number) {
 
 function isAllZero(values: number[]) {
   return values.every((v) => v === 0);
+}
+
+function formatRate(value: number | null | undefined) {
+  if (value === null || value === undefined) return '-';
+  return `${(value * 100).toFixed(1)}%`;
 }
 
 function resolveInheritedPrice(
@@ -123,6 +131,8 @@ function ModelDetailContent() {
   const [deletingMapping, setDeletingMapping] = useState<ModelMappingProvider | null>(null);
 
   const { data: model, isLoading, isError, refetch } = useModel(requestedModel);
+  const { data: modelStatsData } = useModelStats({ requested_model: requestedModel });
+  const { data: providerStatsData } = useModelProviderStats({ requested_model: requestedModel });
   const { data: providersData } = useProviders();
   const providersById = useMemo(() => {
     const entries = providersData?.items?.map((p) => [p.id, p] as const) ?? [];
@@ -205,6 +215,8 @@ function ModelDetailContent() {
   const status = getActiveStatus(model.is_active);
   const modelType = model.model_type ?? 'chat';
   const supportsBilling = modelType === 'chat' || modelType === 'embedding';
+  const modelStats = modelStatsData?.find((stat) => stat.requested_model === requestedModel);
+  const providerStats = providerStatsData ?? [];
 
   return (
     <div className="space-y-6">
@@ -256,6 +268,34 @@ function ModelDetailContent() {
                 </p>
               </div>
             )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Usage Stats (Last 7 Days)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            <div>
+              <p className="text-sm text-muted-foreground">Avg Response Time</p>
+              <p className="text-sm">{formatDuration(modelStats?.avg_response_time_ms ?? null)}</p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Avg First Token (Stream)</p>
+              <p className="text-sm">
+                {formatDuration(modelStats?.avg_first_byte_time_ms ?? null)}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Success Rate</p>
+              <p className="text-sm">{formatRate(modelStats?.success_rate)}</p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Failure Rate</p>
+              <p className="text-sm">{formatRate(modelStats?.failure_rate)}</p>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -376,6 +416,54 @@ function ModelDetailContent() {
           ) : (
             <p className="py-8 text-center text-muted-foreground">
               No providers configured, click button above to add
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Provider Stats (Last 7 Days)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {providerStats.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Provider</TableHead>
+                  <TableHead>Target Model</TableHead>
+                  <TableHead>Avg Response</TableHead>
+                  <TableHead>Avg First Token</TableHead>
+                  <TableHead>Success</TableHead>
+                  <TableHead>Failure</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {providerStats.map((stat: ModelProviderStats) => (
+                  <TableRow key={`${stat.provider_name}-${stat.target_model}`}>
+                    <TableCell className="font-medium">{stat.provider_name}</TableCell>
+                    <TableCell>
+                      <code className="text-sm">{stat.target_model}</code>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {formatDuration(stat.avg_response_time_ms ?? null)}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {formatDuration(stat.avg_first_byte_time_ms ?? null)}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {formatRate(stat.success_rate)}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {formatRate(stat.failure_rate)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <p className="py-8 text-center text-muted-foreground">
+              No stats available for the last 7 days
             </p>
           )}
         </CardContent>

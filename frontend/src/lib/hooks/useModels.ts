@@ -15,6 +15,8 @@ import {
   createModelProvider,
   updateModelProvider,
   deleteModelProvider,
+  getModelStats,
+  getModelProviderStats,
 } from '@/lib/api';
 import { getApiErrorMessage } from '@/lib/api/error';
 import {
@@ -36,6 +38,10 @@ const QUERY_KEYS = {
   modelProviders: ['model-providers'] as const,
   modelProviderList: (params?: ModelProviderListParams) =>
     [...QUERY_KEYS.modelProviders, 'list', params] as const,
+  modelStats: (params?: { requested_model?: string }) =>
+    [...QUERY_KEYS.models, 'stats', params] as const,
+  modelProviderStats: (params?: { requested_model?: string }) =>
+    [...QUERY_KEYS.models, 'provider-stats', params] as const,
 };
 
 // ============ Model Mapping Hooks ============
@@ -58,6 +64,22 @@ export function useModel(requestedModel: string) {
     queryKey: QUERY_KEYS.modelDetail(requestedModel),
     queryFn: () => getModel(requestedModel),
     enabled: !!requestedModel, // Only query when requestedModel is valid
+  });
+}
+
+export function useModelStats(params?: { requested_model?: string }) {
+  return useQuery({
+    queryKey: QUERY_KEYS.modelStats(params),
+    queryFn: () => getModelStats(params),
+    staleTime: 30 * 1000,
+  });
+}
+
+export function useModelProviderStats(params?: { requested_model?: string }) {
+  return useQuery({
+    queryKey: QUERY_KEYS.modelProviderStats(params),
+    queryFn: () => getModelProviderStats(params),
+    staleTime: 30 * 1000,
   });
 }
 

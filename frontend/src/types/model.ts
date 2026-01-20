@@ -154,3 +154,21 @@ export interface ModelProviderExport {
 export interface ModelExport extends ModelMappingCreate {
   providers?: ModelProviderExport[];
 }
+
+export interface ModelStats {
+  requested_model: string;
+  avg_response_time_ms: number | null;
+  avg_first_byte_time_ms: number | null;
+  success_rate: number;
+  failure_rate: number;
+}
+
+export interface ModelProviderStats {
+  requested_model: string;
+  target_model: string;
+  provider_name: string;
+  avg_first_byte_time_ms: number | null;
+  avg_response_time_ms: number | null;
+  success_rate: number;
+  failure_rate: number;
+}
