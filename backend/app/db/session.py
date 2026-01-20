@@ -125,7 +125,7 @@ def _run_migrations(sync_conn) -> None:
     ensure_columns(
         "service_providers",
         {
-            "proxy_enabled": "proxy_enabled BOOLEAN DEFAULT 0",
+            "proxy_enabled": "proxy_enabled BOOLEAN DEFAULT FALSE",
             "proxy_url": "proxy_url TEXT",
         },
     )
