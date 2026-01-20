@@ -55,6 +55,10 @@ function formatUsdOrFree(value: number) {
   return value === 0 ? 'free' : formatUsd(value);
 }
 
+function isAllZero(values: number[]) {
+  return values.every((v) => v === 0);
+}
+
 function resolveInheritedPrice(
   override: number | null | undefined,
   fallback: number | null | undefined
@@ -64,28 +68,22 @@ function resolveInheritedPrice(
   return 0;
 }
 
-function formatInheritedPrice(
-  override: number | null | undefined,
-  fallback: number | null | undefined
-) {
-  return formatUsdOrFree(resolveInheritedPrice(override, fallback));
-}
-
 function formatBilling(
   mapping: ModelMappingProvider,
   fallbackPrices?: { input_price?: number | null; output_price?: number | null }
 ) {
   const mode = mapping.billing_mode ?? 'token_flat';
   if (mode === 'per_request') {
-    const price =
-      mapping.per_request_price === null || mapping.per_request_price === undefined
-        ? '-'
-        : formatUsdOrFree(mapping.per_request_price);
-    return `Per request: ${price}`;
+    if (mapping.per_request_price === null || mapping.per_request_price === undefined) {
+      return 'Per request: -';
+    }
+    if (mapping.per_request_price === 0) return 'free';
+    return `Per request: ${formatUsd(mapping.per_request_price)}`;
   }
   if (mode === 'token_tiered') {
     const tiers = mapping.tiered_pricing ?? [];
     if (!tiers.length) return 'Tiered: -';
+    if (isAllZero(tiers.flatMap((t) => [t.input_price, t.output_price]))) return 'free';
     const preview = tiers
       .slice(0, 2)
       .map((t) => {
@@ -99,7 +97,10 @@ function formatBilling(
     return `Tiered: ${preview}${tiers.length > 2 ? ` (+${tiers.length - 2})` : ''}`;
   }
   // token_flat (default)
-  return `Token: In ${formatInheritedPrice(mapping.input_price, fallbackPrices?.input_price)} / Out ${formatInheritedPrice(mapping.output_price, fallbackPrices?.output_price)} (per 1M)`;
+  const effectiveInput = resolveInheritedPrice(mapping.input_price, fallbackPrices?.input_price);
+  const effectiveOutput = resolveInheritedPrice(mapping.output_price, fallbackPrices?.output_price);
+  if (effectiveInput === 0 && effectiveOutput === 0) return 'free';
+  return `Token: In ${formatUsdOrFree(effectiveInput)} / Out ${formatUsdOrFree(effectiveOutput)} (per 1M)`;
 }
 
 export default function ModelDetailPage() {
