@@ -90,7 +90,7 @@ class ModelMapping(Base):
     )
     # Selection strategy: round_robin or cost_first
     strategy: Mapped[str] = mapped_column(String(50), default="round_robin")
-    # Model type: chat / audio / embedding / images
+    # Model type: chat / speech / transcription / embedding / images
     model_type: Mapped[str] = mapped_column(String(50), default="chat")
     # Model-level matching rules (JSON format)
     matching_rules: Mapped[Optional[dict]] = mapped_column(SQLiteJSON, nullable=True)

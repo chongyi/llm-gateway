@@ -8,7 +8,7 @@ import { ProtocolType } from './provider';
 
 /** Selection Strategy Type */
 export type SelectionStrategy = 'round_robin' | 'cost_first';
-export type ModelType = 'chat' | 'audio' | 'embedding' | 'images';
+export type ModelType = 'chat' | 'speech' | 'transcription' | 'embedding' | 'images';
 
 /** Model Mapping Entity */
 export interface ModelMapping {

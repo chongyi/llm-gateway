@@ -92,6 +92,15 @@ export function ModelForm({
   });
 
   const isActive = watch('is_active');
+  const modelType = watch('model_type');
+  const strategy = watch('strategy');
+  const supportsBilling = modelType === 'chat' || modelType === 'embedding';
+
+  useEffect(() => {
+    if (!supportsBilling && strategy === 'cost_first') {
+      setValue('strategy', 'round_robin');
+    }
+  }, [supportsBilling, strategy, setValue]);
 
   // Fill form data in edit mode
   useEffect(() => {
@@ -124,8 +133,9 @@ export function ModelForm({
 
   // Submit form
   const onFormSubmit = (data: FormData) => {
+    const resolvedStrategy = supportsBilling ? data.strategy : 'round_robin';
     const submitData: ModelMappingCreate | ModelMappingUpdate = {
-      strategy: data.strategy,
+      strategy: resolvedStrategy,
       model_type: data.model_type,
       is_active: data.is_active,
     };
@@ -140,10 +150,15 @@ export function ModelForm({
       submitData.capabilities = model.capabilities;
     }
 
-    const inputPrice = data.input_price.trim();
-    const outputPrice = data.output_price.trim();
-    submitData.input_price = inputPrice ? Number(inputPrice) : null;
-    submitData.output_price = outputPrice ? Number(outputPrice) : null;
+    if (supportsBilling) {
+      const inputPrice = data.input_price.trim();
+      const outputPrice = data.output_price.trim();
+      submitData.input_price = inputPrice ? Number(inputPrice) : null;
+      submitData.output_price = outputPrice ? Number(outputPrice) : null;
+    } else {
+      submitData.input_price = null;
+      submitData.output_price = null;
+    }
 
     onSubmit(submitData);
   };
@@ -188,38 +203,6 @@ export function ModelForm({
 
           
 
-          {/* Pricing */}
-          <div className="rounded-lg border bg-muted/30 p-3">
-            <div className="mb-2 text-sm font-medium">Pricing (USD / 1M tokens)</div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="input_price">Input Price</Label>
-                <Input
-                  id="input_price"
-                  type="number"
-                  min={0}
-                  step="0.0001"
-                  placeholder="e.g. 5"
-                  {...register('input_price')}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="output_price">Output Price</Label>
-                <Input
-                  id="output_price"
-                  type="number"
-                  min={0}
-                  step="0.0001"
-                  placeholder="e.g. 15"
-                  {...register('output_price')}
-                />
-              </div>
-            </div>
-            <p className="mt-2 text-xs text-muted-foreground">
-              Used as model fallback price when no provider override exists; empty means unconfigured.
-            </p>
-          </div>
-
           {/* Model Type */}
           <div className="space-y-2">
             <Label>Model Type</Label>
@@ -233,7 +216,8 @@ export function ModelForm({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="chat">Chat</SelectItem>
-                    <SelectItem value="audio">Audio</SelectItem>
+                    <SelectItem value="speech">Speech</SelectItem>
+                    <SelectItem value="transcription">Transcription</SelectItem>
                     <SelectItem value="embedding">Embedding</SelectItem>
                     <SelectItem value="images">Images</SelectItem>
                   </SelectContent>
@@ -241,6 +225,40 @@ export function ModelForm({
               )}
             />
           </div>
+
+          {/* Pricing */}
+          {supportsBilling && (
+            <div className="rounded-lg border bg-muted/30 p-3">
+              <div className="mb-2 text-sm font-medium">Pricing (USD / 1M tokens)</div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="input_price">Input Price</Label>
+                  <Input
+                    id="input_price"
+                    type="number"
+                    min={0}
+                    step="0.0001"
+                    placeholder="e.g. 5"
+                    {...register('input_price')}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="output_price">Output Price</Label>
+                  <Input
+                    id="output_price"
+                    type="number"
+                    min={0}
+                    step="0.0001"
+                    placeholder="e.g. 15"
+                    {...register('output_price')}
+                  />
+                </div>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Used as model fallback price when no provider override exists; empty means unconfigured.
+              </p>
+            </div>
+          )}
 
           {/* Strategy */}
           <div className="space-y-3">
@@ -289,12 +307,20 @@ export function ModelForm({
 
                   {/* Cost First Strategy */}
                   <Card
-                    className={`cursor-pointer transition-all duration-200 hover:shadow-md ${
+                    className={`transition-all duration-200 ${
+                      supportsBilling ? 'cursor-pointer hover:shadow-md' : 'cursor-not-allowed opacity-50'
+                    } ${
                       field.value === 'cost_first'
                         ? 'border-primary border-2 bg-primary/5'
-                        : 'border-border hover:border-primary/50'
+                        : supportsBilling
+                          ? 'border-border hover:border-primary/50'
+                          : 'border-border'
                     }`}
-                    onClick={() => field.onChange('cost_first')}
+                    onClick={() => {
+                      if (supportsBilling) {
+                        field.onChange('cost_first');
+                      }
+                    }}
                   >
                     <div className="p-4 space-y-2">
                       <div className="flex items-center gap-3">

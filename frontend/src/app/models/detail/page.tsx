@@ -203,6 +203,8 @@ function ModelDetailContent() {
   }
 
   const status = getActiveStatus(model.is_active);
+  const modelType = model.model_type ?? 'chat';
+  const supportsBilling = modelType === 'chat' || modelType === 'embedding';
 
   return (
     <div className="space-y-6">
@@ -234,7 +236,7 @@ function ModelDetailContent() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Model Type</p>
-              <Badge variant="secondary">{model.model_type ?? 'chat'}</Badge>
+              <Badge variant="secondary">{modelType}</Badge>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Status</p>
@@ -244,14 +246,16 @@ function ModelDetailContent() {
               <p className="text-sm text-muted-foreground">Updated At</p>
               <p className="text-sm">{formatDateTime(model.updated_at)}</p>
             </div>
-            <div className="md:col-span-2">
-              <p className="text-sm text-muted-foreground">Pricing (USD / 1M tokens)</p>
-              <p className="text-sm">
-                In: <span className="font-mono">{formatPrice(model.input_price)}</span>
-                <span className="mx-2 text-muted-foreground">/</span>
-                Out: <span className="font-mono">{formatPrice(model.output_price)}</span>
-              </p>
-            </div>
+            {supportsBilling && (
+              <div className="md:col-span-2">
+                <p className="text-sm text-muted-foreground">Pricing (USD / 1M tokens)</p>
+                <p className="text-sm">
+                  In: <span className="font-mono">{formatPrice(model.input_price)}</span>
+                  <span className="mx-2 text-muted-foreground">/</span>
+                  Out: <span className="font-mono">{formatPrice(model.output_price)}</span>
+                </p>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -282,7 +286,7 @@ function ModelDetailContent() {
                 <TableRow>
                   <TableHead>Provider</TableHead>
                   <TableHead>Target Model</TableHead>
-                  <TableHead>Billing</TableHead>
+                  {supportsBilling && <TableHead>Billing</TableHead>}
                   <TableHead>Priority</TableHead>
                   <TableHead>Weight</TableHead>
                   <TableHead>Rules</TableHead>
@@ -315,14 +319,16 @@ function ModelDetailContent() {
                       <TableCell>
                         <code className="text-sm">{mapping.target_model_name}</code>
                       </TableCell>
-                      <TableCell className="text-sm">
-                        <span className="font-mono">
-                          {formatBilling(mapping, {
-                            input_price: model.input_price,
-                            output_price: model.output_price,
-                          })}
-                        </span>
-                      </TableCell>
+                      {supportsBilling && (
+                        <TableCell className="text-sm">
+                          <span className="font-mono">
+                            {formatBilling(mapping, {
+                              input_price: model.input_price,
+                              output_price: model.output_price,
+                            })}
+                          </span>
+                        </TableCell>
+                      )}
                       <TableCell>{mapping.priority}</TableCell>
                       <TableCell>{mapping.weight}</TableCell>
                       <TableCell>
@@ -382,6 +388,7 @@ function ModelDetailContent() {
         providers={providersData?.items || []}
         defaultPrices={{ input_price: model.input_price ?? null, output_price: model.output_price ?? null }}
         mapping={editingMapping}
+        modelType={modelType}
         onSubmit={handleSubmit}
         loading={createMutation.isPending || updateMutation.isPending}
       />
