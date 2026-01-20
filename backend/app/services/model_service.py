@@ -96,6 +96,9 @@ class ModelService:
         is_active: Optional[bool] = None,
         page: int = 1,
         page_size: int = 20,
+        requested_model: Optional[str] = None,
+        model_type: Optional[str] = None,
+        strategy: Optional[str] = None,
     ) -> tuple[list[ModelMappingResponse], int]:
         """
         Get Model Mapping List
@@ -104,12 +107,20 @@ class ModelService:
             is_active: Filter by active status
             page: Page number
             page_size: Items per page
+            requested_model: Filter by model name (fuzzy)
+            model_type: Filter by model type
+            strategy: Filter by strategy
         
         Returns:
             tuple[list[ModelMappingResponse], int]: (Model mapping list, Total count)
         """
         mappings, total = await self.model_repo.get_all_mappings(
-            is_active, page, page_size
+            is_active=is_active, 
+            page=page, 
+            page_size=page_size,
+            requested_model=requested_model,
+            model_type=model_type,
+            strategy=strategy
         )
         
         responses = []

@@ -95,6 +95,8 @@ class SQLAlchemyProviderRepository(ProviderRepository):
         is_active: Optional[bool] = None,
         page: int = 1,
         page_size: int = 20,
+        name: Optional[str] = None,
+        protocol: Optional[str] = None,
     ) -> tuple[list[Provider], int]:
         """Get Provider List"""
         # Build query
@@ -104,6 +106,14 @@ class SQLAlchemyProviderRepository(ProviderRepository):
         if is_active is not None:
             query = query.where(ServiceProvider.is_active == is_active)
             count_query = count_query.where(ServiceProvider.is_active == is_active)
+            
+        if name:
+            query = query.where(ServiceProvider.name.ilike(f"%{name}%"))
+            count_query = count_query.where(ServiceProvider.name.ilike(f"%{name}%"))
+            
+        if protocol:
+            query = query.where(ServiceProvider.protocol == protocol)
+            count_query = count_query.where(ServiceProvider.protocol == protocol)
         
         # Get total count
         total_result = await self.session.execute(count_query)

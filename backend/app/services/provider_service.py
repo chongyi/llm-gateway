@@ -78,6 +78,8 @@ class ProviderService:
         is_active: Optional[bool] = None,
         page: int = 1,
         page_size: int = 20,
+        name: Optional[str] = None,
+        protocol: Optional[str] = None,
     ) -> tuple[list[ProviderResponse], int]:
         """
         Get Provider List
@@ -86,11 +88,19 @@ class ProviderService:
             is_active: Filter by active status
             page: Page number
             page_size: Items per page
+            name: Filter by name (fuzzy)
+            protocol: Filter by protocol
         
         Returns:
             tuple[list[ProviderResponse], int]: (Provider list, Total count)
         """
-        providers, total = await self.repo.get_all(is_active, page, page_size)
+        providers, total = await self.repo.get_all(
+            is_active=is_active, 
+            page=page, 
+            page_size=page_size,
+            name=name,
+            protocol=protocol
+        )
         return [self._to_response(p) for p in providers], total
     
     async def update(self, id: int, data: ProviderUpdate) -> ProviderResponse:

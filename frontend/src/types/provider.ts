@@ -50,6 +50,8 @@ export interface ProviderListParams {
   is_active?: boolean;
   page?: number;
   page_size?: number;
+  name?: string;
+  protocol?: string;
 }
 
 /** Provider Export Entity (includes API key) */

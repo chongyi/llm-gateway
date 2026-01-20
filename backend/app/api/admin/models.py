@@ -84,6 +84,9 @@ async def import_models(
 async def list_models(
     service: ModelServiceDep,
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
+    requested_model: Optional[str] = Query(None, description="Filter by model name"),
+    model_type: Optional[str] = Query(None, description="Filter by model type"),
+    strategy: Optional[str] = Query(None, description="Filter by strategy"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
 ):
@@ -91,7 +94,14 @@ async def list_models(
     Get Model Mapping List
     """
     try:
-        items, total = await service.get_all_mappings(is_active, page, page_size)
+        items, total = await service.get_all_mappings(
+            is_active=is_active, 
+            page=page, 
+            page_size=page_size,
+            requested_model=requested_model,
+            model_type=model_type,
+            strategy=strategy
+        )
         return PaginatedModelResponse(
             items=items,
             total=total,

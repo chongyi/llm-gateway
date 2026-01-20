@@ -119,6 +119,9 @@ export interface ModelListParams {
   is_active?: boolean;
   page?: number;
   page_size?: number;
+  requested_model?: string;
+  model_type?: ModelType;
+  strategy?: SelectionStrategy;
 }
 
 /** Model-Provider Mapping List Query Params */
