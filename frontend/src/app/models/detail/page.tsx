@@ -51,7 +51,7 @@ function protocolLabel(protocol: ProtocolType) {
 
 function roundUpTo4Decimals(value: number) {
   const factor = 10000;
-  return Math.ceil((value + Number.EPSILON) * factor) / factor;
+  return Math.round((value + Number.EPSILON) * factor) / factor;
 }
 
 function formatUsdCeil4(value: number | null | undefined) {
