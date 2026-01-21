@@ -37,7 +37,7 @@ import {
   ModelMappingProviderUpdate,
   ModelProviderStats,
 } from '@/types';
-import { formatDateTime, getActiveStatus, formatUsdCompact, formatDuration } from '@/lib/utils';
+import { formatDateTime, getActiveStatus, formatDuration } from '@/lib/utils';
 import { ProtocolType } from '@/types/provider';
 
 function protocolLabel(protocol: ProtocolType) {
@@ -49,13 +49,24 @@ function protocolLabel(protocol: ProtocolType) {
   }
 }
 
-function formatPrice(value: number | null | undefined) {
+function roundUpTo4Decimals(value: number) {
+  const factor = 10000;
+  return Math.ceil((value + Number.EPSILON) * factor) / factor;
+}
+
+function formatUsdCeil4(value: number | null | undefined) {
   if (value === null || value === undefined) return '-';
-  return formatUsdCompact(value);
+  const num = Number(value);
+  if (Number.isNaN(num)) return '-';
+  return `$${roundUpTo4Decimals(num).toFixed(4)}`;
+}
+
+function formatPrice(value: number | null | undefined) {
+  return formatUsdCeil4(value);
 }
 
 function formatUsdOrFree(value: number) {
-  return value === 0 ? 'free' : formatUsdCompact(value);
+  return value === 0 ? 'free' : formatUsdCeil4(value);
 }
 
 function isAllZero(values: number[]) {
@@ -86,7 +97,7 @@ function formatBilling(
       return 'Per request: -';
     }
     if (mapping.per_request_price === 0) return 'free';
-    return `Per request: ${formatUsdCompact(mapping.per_request_price)}`;
+    return `Per request: ${formatUsdCeil4(mapping.per_request_price)}`;
   }
   if (mode === 'token_tiered') {
     const tiers = mapping.tiered_pricing ?? [];
