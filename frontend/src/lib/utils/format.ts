@@ -84,9 +84,9 @@ export function formatDuration(ms: number | null | undefined): string {
   if (ms === null || ms === undefined) return '-';
   
   if (ms < 1000) {
-    return `${ms}ms`;
+    return `${Number(ms.toFixed(2))}ms`;
   } else if (ms < 60000) {
-    return `${(ms / 1000).toFixed(2)}s`;
+    return `${Number((ms / 1000).toFixed(2))}s`;
   } else {
     const minutes = Math.floor(ms / 60000);
     const seconds = ((ms % 60000) / 1000).toFixed(0);
