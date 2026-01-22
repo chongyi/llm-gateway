@@ -26,6 +26,8 @@ from sqlalchemy import (
 from sqlalchemy.dialects.sqlite import JSON as SQLiteJSON
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
+from app.common.time import utc_now_naive
+
 
 class Base(DeclarativeBase):
     """SQLAlchemy ORM Base Class"""
@@ -62,11 +64,11 @@ class ServiceProvider(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     # Creation Time
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, nullable=False
+        DateTime, default=utc_now_naive, nullable=False
     )
     # Update Time
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+        DateTime, default=utc_now_naive, onupdate=utc_now_naive, nullable=False
     )
     
     # Relationship: Model mappings under this provider
@@ -88,7 +90,7 @@ class ModelMapping(Base):
     requested_model: Mapped[str] = mapped_column(
         String(100), primary_key=True, nullable=False
     )
-    # Selection strategy: round_robin or cost_first
+    # Selection strategy: round_robin / cost_first / priority
     strategy: Mapped[str] = mapped_column(String(50), default="round_robin")
     # Model type: chat / speech / transcription / embedding / images
     model_type: Mapped[str] = mapped_column(String(50), default="chat")
@@ -103,16 +105,16 @@ class ModelMapping(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     # Creation Time
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, nullable=False
+        DateTime, default=utc_now_naive, nullable=False
     )
     # Update Time
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+        DateTime, default=utc_now_naive, onupdate=utc_now_naive, nullable=False
     )
     
     # Relationship: Provider mappings under this model
     providers: Mapped[list["ModelMappingProvider"]] = relationship(
-        "ModelMappingProvider", back_populates="model_mapping"
+        "ModelMappingProvider", back_populates="model_mapping", cascade="all, delete-orphan"
     )
 
 
@@ -162,11 +164,11 @@ class ModelMappingProvider(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     # Creation Time
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, nullable=False
+        DateTime, default=utc_now_naive, nullable=False
     )
     # Update Time
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+        DateTime, default=utc_now_naive, onupdate=utc_now_naive, nullable=False
     )
     
     # Unique Constraint: Only one mapping per provider for the same model
@@ -201,7 +203,7 @@ class ApiKey(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     # Creation Time
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, nullable=False
+        DateTime, default=utc_now_naive, nullable=False
     )
     # Last Used Time
     last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
@@ -258,6 +260,8 @@ class RequestLog(Base):
     price_source: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     # Request Headers (JSON format, sanitized)
     request_headers: Mapped[Optional[dict]] = mapped_column(SQLiteJSON, nullable=True)
+    # Response Headers (JSON format)
+    response_headers: Mapped[Optional[dict]] = mapped_column(SQLiteJSON, nullable=True)
     # Request Body (JSON format)
     request_body: Mapped[Optional[dict]] = mapped_column(SQLiteJSON, nullable=True)
     # Response Status Code
@@ -270,7 +274,16 @@ class RequestLog(Base):
     trace_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     # Is Stream Request
     is_stream: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    
+    # Protocol Conversion Fields (for debugging and analysis)
+    # Client request protocol (openai/anthropic)
+    request_protocol: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    # Upstream supplier protocol (openai/anthropic)
+    supplier_protocol: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    # Converted request body (sent to upstream after protocol conversion)
+    converted_request_body: Mapped[Optional[dict]] = mapped_column(SQLiteJSON, nullable=True)
+    # Upstream response body (original response before protocol conversion)
+    upstream_response_body: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     # Indices for optimizing queries
     __table_args__ = (
         Index("idx_request_logs_time", "request_time"),

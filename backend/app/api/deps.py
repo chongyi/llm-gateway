@@ -25,7 +25,16 @@ from app.services import (
     ApiKeyService,
     LogService,
     ProxyService,
+    RoundRobinStrategy,
+    CostFirstStrategy,
+    PriorityStrategy,
 )
+
+
+# Singleton strategies
+_round_robin_strategy = RoundRobinStrategy()
+_cost_first_strategy = CostFirstStrategy()
+_priority_strategy = PriorityStrategy()
 
 
 async def get_db():
@@ -97,7 +106,14 @@ def get_proxy_service(db: DbSession) -> ProxyService:
     model_repo = SQLAlchemyModelRepository(db)
     provider_repo = SQLAlchemyProviderRepository(db)
     log_repo = SQLAlchemyLogRepository(db)
-    return ProxyService(model_repo, provider_repo, log_repo)
+    return ProxyService(
+        model_repo, 
+        provider_repo, 
+        log_repo, 
+        round_robin_strategy=_round_robin_strategy,
+        cost_first_strategy=_cost_first_strategy,
+        priority_strategy=_priority_strategy,
+    )
 
 
 # ============ Auth Dependencies ============

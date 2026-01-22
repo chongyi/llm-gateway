@@ -7,12 +7,12 @@ Defines Model Mapping and Model-Provider Mapping related Data Transfer Objects (
 from datetime import datetime
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing_extensions import Literal
 
 
 BillingMode = Literal["token_flat", "token_tiered", "per_request"]
-SelectionStrategyType = Literal["round_robin", "cost_first"]
+SelectionStrategyType = Literal["round_robin", "cost_first", "priority"]
 ModelType = Literal["chat", "speech", "transcription", "embedding", "images"]
 
 
@@ -35,7 +35,7 @@ class ModelMappingBase(BaseModel):
     requested_model: str = Field(
         ..., min_length=1, max_length=100, description="Requested Model Name"
     )
-    # Selection Strategy: round_robin or cost_first
+    # Selection Strategy: round_robin / cost_first / priority
     strategy: SelectionStrategyType = Field("round_robin", description="Selection Strategy")
     # Model Type: chat / speech / transcription / embedding / images
     model_type: ModelType = Field("chat", description="Model Type")
@@ -79,8 +79,7 @@ class ModelMapping(ModelMappingBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ModelMappingResponse(ModelMapping):
@@ -91,8 +90,7 @@ class ModelMappingResponse(ModelMapping):
     # Associated Provider List (Returned in detail query)
     providers: Optional[list["ModelMappingProviderResponse"]] = None
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ============ Model-Provider Mapping ============
@@ -174,8 +172,7 @@ class ModelMappingProvider(ModelMappingProviderBase):
     created_at: datetime
     updated_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ModelMappingProviderResponse(ModelMappingProvider):
@@ -186,8 +183,7 @@ class ModelMappingProviderResponse(ModelMappingProvider):
     # Provider Protocol Type: openai or anthropic
     provider_protocol: Optional[str] = Field(None, description="Provider Protocol Type")
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ModelProviderExport(BaseModel):

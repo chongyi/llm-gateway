@@ -69,6 +69,7 @@ class SQLAlchemyLogRepository(LogRepository):
             output_cost=float(entity.output_cost) if entity.output_cost is not None else None,
             price_source=entity.price_source,
             request_headers=entity.request_headers,
+            response_headers=entity.response_headers,
             request_body=entity.request_body,
             response_status=entity.response_status,
             response_body=entity.response_body,
@@ -76,6 +77,10 @@ class SQLAlchemyLogRepository(LogRepository):
             matched_provider_count=entity.matched_provider_count,
             trace_id=entity.trace_id,
             is_stream=entity.is_stream,
+            request_protocol=entity.request_protocol,
+            supplier_protocol=entity.supplier_protocol,
+            converted_request_body=entity.converted_request_body,
+            upstream_response_body=entity.upstream_response_body,
         )
     
     async def create(self, data: RequestLogCreate) -> RequestLogModel:
@@ -99,12 +104,17 @@ class SQLAlchemyLogRepository(LogRepository):
             output_cost=data.output_cost,
             price_source=data.price_source,
             request_headers=data.request_headers,
+            response_headers=data.response_headers,
             request_body=data.request_body,
             response_status=data.response_status,
             response_body=data.response_body,
             error_info=data.error_info,
             trace_id=data.trace_id,
             is_stream=data.is_stream,
+            request_protocol=data.request_protocol,
+            supplier_protocol=data.supplier_protocol,
+            converted_request_body=data.converted_request_body,
+            upstream_response_body=data.upstream_response_body,
         )
         self.session.add(entity)
         await self.session.commit()

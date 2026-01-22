@@ -29,12 +29,19 @@ export interface RequestLog {
 /** Request Log Detail Entity (Includes full request/response) */
 export interface RequestLogDetail extends RequestLog {
   request_headers?: Record<string, string>;  // Sanitized
+  response_headers?: Record<string, string>; // Sanitized
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   request_body?: Record<string, any>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   response_body?: any;
   error_info?: string;
   price_source?: 'SupplierOverride' | 'ModelFallback' | 'DefaultZero' | string | null;
+  request_protocol?: string;
+  supplier_protocol?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  converted_request_body?: Record<string, any>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  upstream_response_body?: any;
 }
 
 /** Log Query Params */

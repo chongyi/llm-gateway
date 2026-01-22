@@ -19,6 +19,11 @@ def utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+def utc_now_naive() -> datetime:
+    """Return current UTC time (naive) for database defaults."""
+    return datetime.now(UTC).replace(tzinfo=None)
+
+
 def ensure_utc(dt: Optional[datetime]) -> Optional[datetime]:
     """
     Ensure a datetime is UTC-aware.

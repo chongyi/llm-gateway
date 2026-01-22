@@ -35,7 +35,7 @@ from app.repositories.provider_repo import ProviderRepository
 from app.repositories.log_repo import LogRepository
 from app.rules import RuleEngine, RuleContext, TokenUsage, CandidateProvider
 from app.services.retry_handler import RetryHandler, AttemptRecord
-from app.services.strategy import RoundRobinStrategy, CostFirstStrategy, SelectionStrategy
+from app.services.strategy import RoundRobinStrategy, CostFirstStrategy, PriorityStrategy, SelectionStrategy
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +80,7 @@ class ProxyService:
     1. Parse request, extract requested_model
     2. Calculate input Token
     3. Rule engine match, get candidate providers
-    4. Round-robin strategy selects provider
+    4. Selection strategy selects provider
     5. Replace model field, forward request
     6. Handle retry and failover
     7. Calculate output Token
@@ -93,6 +93,9 @@ class ProxyService:
         model_repo: ModelRepository,
         provider_repo: ProviderRepository,
         log_repo: LogRepository,
+        round_robin_strategy: Optional[SelectionStrategy] = None,
+        cost_first_strategy: Optional[SelectionStrategy] = None,
+        priority_strategy: Optional[SelectionStrategy] = None,
     ):
         """
         Initialize Service
@@ -101,27 +104,33 @@ class ProxyService:
             model_repo: Model Repository
             provider_repo: Provider Repository
             log_repo: Log Repository
+            round_robin_strategy: Optional Round Robin Strategy instance
+            cost_first_strategy: Optional Cost First Strategy instance
+            priority_strategy: Optional Priority Strategy instance
         """
         self.model_repo = model_repo
         self.provider_repo = provider_repo
         self.log_repo = log_repo
         self.rule_engine = RuleEngine()
         # Strategy selection instances (reused for performance)
-        self._round_robin_strategy = RoundRobinStrategy()
-        self._cost_first_strategy = CostFirstStrategy()
+        self._round_robin_strategy = round_robin_strategy or RoundRobinStrategy()
+        self._cost_first_strategy = cost_first_strategy or CostFirstStrategy()
+        self._priority_strategy = priority_strategy or PriorityStrategy()
 
     def _get_strategy(self, strategy_name: str) -> SelectionStrategy:
         """
         Get strategy instance based on strategy name
 
         Args:
-            strategy_name: Strategy name ("round_robin" or "cost_first")
+            strategy_name: Strategy name ("round_robin", "cost_first", or "priority")
 
         Returns:
             SelectionStrategy: Strategy instance
         """
         if strategy_name == "cost_first":
             return self._cost_first_strategy
+        if strategy_name == "priority":
+            return self._priority_strategy
         else:
             # Default to round_robin for unknown strategies
             return self._round_robin_strategy
@@ -329,6 +338,13 @@ class ProxyService:
         retry_handler = RetryHandler(strategy)
 
         failed_attempt_logged = False
+        # Track protocol conversion data for logging
+        conversion_data: dict[str, Any] = {
+            "request_protocol": request_protocol,
+            "supplier_protocol": None,
+            "converted_request_body": None,
+            "upstream_response_body": None,
+        }
 
         async def log_failed_attempt(attempt: AttemptRecord) -> None:
             nonlocal failed_attempt_logged
@@ -362,12 +378,18 @@ class ProxyService:
                 output_cost=None,
                 price_source=billing.price_source,
                 request_headers=sanitize_headers(headers),
+                response_headers=sanitize_headers(attempt.response.headers),
                 request_body=sanitized_body,
                 response_status=attempt.response.status_code,
                 response_body=self._serialize_response_body(attempt.response.body),
                 error_info=attempt.response.error,
                 trace_id=trace_id,
                 is_stream=False,
+                # Protocol conversion fields
+                request_protocol=request_protocol,
+                supplier_protocol=attempt.provider.protocol,
+                converted_request_body=_smart_truncate(conversion_data.get("converted_request_body")),
+                upstream_response_body=self._serialize_response_body(attempt.response.body),
             )
             try:
                 await self.log_repo.create(attempt_log)
@@ -391,6 +413,9 @@ class ProxyService:
                     body=body,
                     target_model=candidate.target_model,
                 )
+                # Track conversion data for logging
+                conversion_data["supplier_protocol"] = candidate.protocol
+                conversion_data["converted_request_body"] = supplier_body
                 same_protocol = normalize_protocol(request_protocol) == normalize_protocol(candidate.protocol)
                 proxy_config = build_proxy_config(
                     candidate.proxy_enabled,
@@ -430,6 +455,8 @@ class ProxyService:
         )
 
         if result.response.body is not None and result.final_provider is not None:
+            # Capture upstream response before protocol conversion
+            conversion_data["upstream_response_body"] = result.response.body
             try:
                 same_protocol = normalize_protocol(request_protocol) == normalize_protocol(result.final_provider.protocol)
                 if not same_protocol:
@@ -507,13 +534,18 @@ class ProxyService:
             output_cost=cost.output_cost,
             price_source=billing.price_source,
             request_headers=sanitize_headers(headers),
+            response_headers=sanitize_headers(result.response.headers),
             request_body=sanitized_body,
-
             response_status=result.response.status_code,
             response_body=self._serialize_response_body(result.response.body),
             error_info=result.response.error,
             trace_id=trace_id,
             is_stream=False,
+            # Protocol conversion fields
+            request_protocol=conversion_data.get("request_protocol"),
+            supplier_protocol=conversion_data.get("supplier_protocol"),
+            converted_request_body=_smart_truncate(conversion_data.get("converted_request_body")),
+            upstream_response_body=self._serialize_response_body(conversion_data.get("upstream_response_body")),
         )
         
         # DEBUG: Log request details
@@ -590,6 +622,14 @@ class ProxyService:
         strategy = self._get_strategy(model_mapping.strategy)
         retry_handler = RetryHandler(strategy)
 
+        # Track protocol conversion data for logging
+        stream_conversion_data: dict[str, Any] = {
+            "request_protocol": request_protocol,
+            "supplier_protocol": None,
+            "converted_request_body": None,
+            "upstream_chunks": [],
+        }
+
         # 8. Execute streaming request
         def forward_stream_fn(candidate: CandidateProvider):
             async def error_gen(msg: str):
@@ -604,6 +644,9 @@ class ProxyService:
                     body=body,
                     target_model=candidate.target_model,
                 )
+                # Track conversion data for logging
+                stream_conversion_data["supplier_protocol"] = candidate.protocol
+                stream_conversion_data["converted_request_body"] = supplier_body
             except Exception as e:
                 error_msg = str(e)
                 logger.error(
@@ -646,8 +689,13 @@ class ProxyService:
                     return
 
                 async def upstream_bytes() -> AsyncGenerator[bytes, None]:
+                    # Reset upstream chunks for the current attempt
+                    stream_conversion_data["upstream_chunks"] = []
+                    
+                    stream_conversion_data["upstream_chunks"].append(first_chunk)
                     yield first_chunk
                     async for chunk, _ in upstream_gen:
+                        stream_conversion_data["upstream_chunks"].append(chunk)
                         yield chunk
 
                 try:
@@ -730,12 +778,18 @@ class ProxyService:
                 output_cost=None,
                 price_source=billing.price_source,
                 request_headers=sanitize_headers(headers),
+                response_headers=sanitize_headers(attempt.response.headers),
                 request_body=sanitized_body,
                 response_status=attempt.response.status_code,
                 response_body=self._serialize_response_body(attempt.response.body),
                 error_info=attempt.response.error,
                 trace_id=trace_id,
                 is_stream=True,
+                # Protocol conversion fields
+                request_protocol=request_protocol,
+                supplier_protocol=attempt.provider.protocol,
+                converted_request_body=_smart_truncate(stream_conversion_data.get("converted_request_body")),
+                upstream_response_body=self._serialize_response_body(attempt.response.body),
             )
             try:
                 with anyio.CancelScope(shield=True):
@@ -833,13 +887,7 @@ class ProxyService:
                     ensure_ascii=False,
                     indent=2,
                 )
-                combined_body = (
-                    "Original:\n---\n"
-                    + raw_stream_text
-                    + "\n---\n\nFinal Response (After reconstruction):\n---\n"
-                    + reconstructed_body
-                    + "\n---"
-                )
+                combined_body = raw_stream_text
                 log_data = RequestLogCreate(
                     request_time=request_time,
                     api_key_id=api_key_id,
@@ -859,12 +907,23 @@ class ProxyService:
                     output_cost=cost.output_cost,
                     price_source=billing.price_source,
                     request_headers=sanitize_headers(headers),
+                    response_headers=sanitize_headers(initial_response.headers),
                     request_body=sanitized_body,
                     response_body=combined_body if raw_stream_text or reconstructed_body else None,
                     response_status=initial_response.status_code,
                     error_info=initial_response.error or stream_error,
                     trace_id=trace_id,
                     is_stream=True,
+                    # Protocol conversion fields
+                    request_protocol=stream_conversion_data.get("request_protocol"),
+                    supplier_protocol=stream_conversion_data.get("supplier_protocol"),
+                    converted_request_body=_smart_truncate(stream_conversion_data.get("converted_request_body")),
+                    # For stream, upstream_response_body is the raw stream captured from upstream
+                    upstream_response_body=(
+                        b"".join(stream_conversion_data["upstream_chunks"]).decode("utf-8", errors="replace")
+                        if stream_conversion_data.get("upstream_chunks")
+                        else (raw_stream_text if raw_stream_text else None)
+                    ),
                 )
                 
                 # DEBUG: Log request details

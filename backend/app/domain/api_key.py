@@ -7,7 +7,7 @@ Defines API Key related Data Transfer Objects (DTOs).
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ApiKeyBase(BaseModel):
@@ -39,8 +39,7 @@ class ApiKeyModel(ApiKeyBase):
     created_at: datetime = Field(..., description="Creation Time")
     last_used_at: Optional[datetime] = Field(None, description="Last Used Time")
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ApiKeyResponse(ApiKeyBase):
@@ -53,8 +52,7 @@ class ApiKeyResponse(ApiKeyBase):
     created_at: datetime = Field(..., description="Creation Time")
     last_used_at: Optional[datetime] = Field(None, description="Last Used Time")
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ApiKeyCreateResponse(ApiKeyBase):
@@ -67,5 +65,4 @@ class ApiKeyCreateResponse(ApiKeyBase):
     created_at: datetime = Field(..., description="Creation Time")
     last_used_at: Optional[datetime] = Field(None, description="Last Used Time")
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

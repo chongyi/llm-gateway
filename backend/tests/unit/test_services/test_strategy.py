@@ -4,7 +4,7 @@ Round Robin Strategy Unit Tests
 
 import pytest
 import asyncio
-from app.services.strategy import RoundRobinStrategy, CostFirstStrategy
+from app.services.strategy import RoundRobinStrategy, CostFirstStrategy, PriorityStrategy
 from app.rules.models import CandidateProvider
 
 
@@ -291,3 +291,159 @@ class TestCostFirstStrategy:
         # Provider 2: $1 * 1M/1M = $1.00
         # Provider 3: $5 * 1M/1M = $5.00
         # Provider 1: $10 * 1M/1M = $10.00
+
+    @pytest.mark.asyncio
+    async def test_select_tie_round_robin(self):
+        """Test round robin selection when costs are equal"""
+        # Create two candidates with equal lowest cost
+        tie_candidates = [
+            CandidateProvider(
+                provider_id=1,
+                provider_name="Provider1",
+                base_url="https://api1.com",
+                protocol="openai",
+                api_key="key1",
+                target_model="model1",
+                priority=1,
+                billing_mode="token_flat",
+                input_price=1.0,
+                output_price=3.0,
+                model_input_price=5.0,
+                model_output_price=15.0,
+            ),
+            CandidateProvider(
+                provider_id=2,
+                provider_name="Provider2",
+                base_url="https://api2.com",
+                protocol="openai",
+                api_key="key2",
+                target_model="model2",
+                priority=2,
+                billing_mode="token_flat",
+                input_price=1.0,  # Same price
+                output_price=3.0,
+                model_input_price=5.0,
+                model_output_price=15.0,
+            ),
+            CandidateProvider(
+                provider_id=3,
+                provider_name="Provider3",
+                base_url="https://api3.com",
+                protocol="openai",
+                api_key="key3",
+                target_model="model3",
+                priority=3,
+                billing_mode="token_flat",
+                input_price=2.0,  # Higher price
+                output_price=6.0,
+                model_input_price=5.0,
+                model_output_price=15.0,
+            ),
+        ]
+        
+        # Reset internal round robin state if needed (not directly exposed but we can rely on fresh state for test)
+        # Actually CostFirstStrategy.__init__ creates a new RoundRobinStrategy
+        
+        # 1st selection
+        selected = await self.strategy.select(tie_candidates, "tie-test-model", input_tokens=1000)
+        assert selected.provider_id in [1, 2]
+        first_id = selected.provider_id
+        
+        # 2nd selection
+        selected = await self.strategy.select(tie_candidates, "tie-test-model", input_tokens=1000)
+        assert selected.provider_id in [1, 2]
+        assert selected.provider_id != first_id
+        
+        # 3rd selection (should loop back)
+        selected = await self.strategy.select(tie_candidates, "tie-test-model", input_tokens=1000)
+        assert selected.provider_id == first_id
+
+
+class TestPriorityStrategy:
+    """Priority Strategy Tests"""
+
+    def setup_method(self):
+        """Setup before test"""
+        self.strategy = PriorityStrategy()
+        self.candidates = [
+            CandidateProvider(
+                provider_id=1,
+                provider_name="Priority0-A",
+                base_url="https://api1.com",
+                protocol="openai",
+                api_key="key1",
+                target_model="model1",
+                priority=0,
+            ),
+            CandidateProvider(
+                provider_id=2,
+                provider_name="Priority0-B",
+                base_url="https://api2.com",
+                protocol="openai",
+                api_key="key2",
+                target_model="model2",
+                priority=0,
+            ),
+            CandidateProvider(
+                provider_id=3,
+                provider_name="Priority1",
+                base_url="https://api3.com",
+                protocol="openai",
+                api_key="key3",
+                target_model="model3",
+                priority=1,
+            ),
+            CandidateProvider(
+                provider_id=4,
+                provider_name="Priority2",
+                base_url="https://api4.com",
+                protocol="openai",
+                api_key="key4",
+                target_model="model4",
+                priority=2,
+            ),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_select_priority_round_robin(self):
+        """Test priority selection with round robin within same priority"""
+        self.strategy.reset()
+        selected = await self.strategy.select(self.candidates, "test-model")
+        assert selected.provider_id == 1
+        selected = await self.strategy.select(self.candidates, "test-model")
+        assert selected.provider_id == 2
+        selected = await self.strategy.select(self.candidates, "test-model")
+        assert selected.provider_id == 1
+
+    @pytest.mark.asyncio
+    async def test_get_next_priority_fallback(self):
+        """Test priority failover order across priority groups"""
+        self.strategy.reset()
+        selected = await self.strategy.select(self.candidates, "test-model")
+        assert selected.provider_id == 1
+
+        next_provider = await self.strategy.get_next(self.candidates, "test-model", selected)
+        assert next_provider.provider_id == 2
+
+        next_provider = await self.strategy.get_next(self.candidates, "test-model", next_provider)
+        assert next_provider.provider_id == 3
+
+        next_provider = await self.strategy.get_next(self.candidates, "test-model", next_provider)
+        assert next_provider.provider_id == 4
+
+        next_provider = await self.strategy.get_next(self.candidates, "test-model", next_provider)
+        assert next_provider is None
+
+    @pytest.mark.asyncio
+    async def test_get_next_rotates_from_late_selection(self):
+        """Test failover when the last selected provider is later in the group"""
+        self.strategy.reset()
+        _ = await self.strategy.select(self.candidates, "test-model")
+        selected = await self.strategy.select(self.candidates, "test-model")
+        assert selected.provider_id == 2
+
+        next_provider = await self.strategy.get_next(self.candidates, "test-model", selected)
+        assert next_provider.provider_id == 1
+
+        next_provider = await self.strategy.get_next(self.candidates, "test-model", next_provider)
+        assert next_provider.provider_id == 3

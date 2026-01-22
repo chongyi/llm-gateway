@@ -107,15 +107,41 @@ class RoundRobinStrategy(SelectionStrategy):
         if not candidates:
             return None
         
+        # Calculate total weight
+        total_weight = sum(c.weight for c in candidates)
+        if total_weight <= 0:
+            # Fallback to simple round robin if weights are invalid
+            total_weight = len(candidates)
+            use_simple_rr = True
+        else:
+            use_simple_rr = False
+
         async with self.lock:
             # Get current count
             counter = self._counters.get(requested_model, 0)
-            # Select provider
-            index = counter % len(candidates)
+            
+            if use_simple_rr:
+                index = counter % len(candidates)
+                selected = candidates[index]
+            else:
+                # Weighted selection
+                current_val = counter % total_weight
+                selected = None
+                cumulative_weight = 0
+                for candidate in candidates:
+                    cumulative_weight += candidate.weight
+                    if current_val < cumulative_weight:
+                        selected = candidate
+                        break
+                
+                # Should not happen if logic is correct
+                if selected is None:
+                    selected = candidates[0]
+
             # Update count
             self._counters[requested_model] = counter + 1
         
-        return candidates[index]
+        return selected
     
     async def get_next(
         self,
@@ -169,6 +195,174 @@ class RoundRobinStrategy(SelectionStrategy):
             self._counters.clear()
 
 
+class PriorityStrategy(SelectionStrategy):
+    """
+    Priority Strategy
+
+    Selects providers by priority (lower value means higher priority).
+    Uses round robin within the same priority group.
+    """
+
+    def __init__(self):
+        """Initialize Strategy"""
+        self._counters: dict[tuple[str, int], int] = {}
+        self._last_selected_index: dict[tuple[str, int], int] = {}
+        self._lock: Optional[asyncio.Lock] = None
+
+    @property
+    def lock(self) -> asyncio.Lock:
+        """Get lock (lazy loading)"""
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        return self._lock
+
+    def _group_candidates(
+        self,
+        candidates: list[CandidateProvider],
+    ) -> dict[int, list[CandidateProvider]]:
+        grouped: dict[int, list[CandidateProvider]] = {}
+        for candidate in candidates:
+            grouped.setdefault(candidate.priority, []).append(candidate)
+        for priority, group in grouped.items():
+            grouped[priority] = sorted(group, key=lambda c: c.provider_id)
+        return grouped
+
+    async def _select_from_group(
+        self,
+        group: list[CandidateProvider],
+        requested_model: str,
+        priority: int,
+    ) -> CandidateProvider:
+        key = (requested_model, priority)
+        
+        # Calculate total weight
+        total_weight = sum(c.weight for c in group)
+        if total_weight <= 0:
+            total_weight = len(group)
+            use_simple_rr = True
+        else:
+            use_simple_rr = False
+            
+        async with self.lock:
+            counter = self._counters.get(key, 0)
+            
+            if use_simple_rr:
+                index = counter % len(group)
+                selected = group[index]
+            else:
+                current_val = counter % total_weight
+                selected = None
+                cumulative_weight = 0
+                for i, candidate in enumerate(group):
+                    cumulative_weight += candidate.weight
+                    if current_val < cumulative_weight:
+                        selected = candidate
+                        index = i
+                        break
+                
+                if selected is None:
+                    selected = group[0]
+                    index = 0
+
+            self._counters[key] = counter + 1
+            self._last_selected_index[key] = index
+        return selected
+
+    async def select(
+        self,
+        candidates: list[CandidateProvider],
+        requested_model: str,
+        input_tokens: Optional[int] = None,
+    ) -> Optional[CandidateProvider]:
+        """
+        Select provider by priority with round robin within same priority
+
+        Args:
+            candidates: List of candidate providers
+            requested_model: Requested model name
+            input_tokens: Number of input tokens (unused in priority strategy)
+
+        Returns:
+            Optional[CandidateProvider]: Selected provider
+        """
+        if not candidates:
+            return None
+
+        grouped = self._group_candidates(candidates)
+        top_priority = min(grouped.keys())
+        return await self._select_from_group(grouped[top_priority], requested_model, top_priority)
+
+    async def get_next(
+        self,
+        candidates: list[CandidateProvider],
+        requested_model: str,
+        current: CandidateProvider,
+        input_tokens: Optional[int] = None,
+    ) -> Optional[CandidateProvider]:
+        """
+        Get next provider by priority (used for failover)
+
+        Args:
+            candidates: List of candidate providers
+            requested_model: Requested model name
+            current: Current provider
+            input_tokens: Number of input tokens (unused in priority strategy)
+
+        Returns:
+            Optional[CandidateProvider]: Next provider, or None if no provider available
+        """
+        if not candidates or len(candidates) <= 1:
+            return None
+
+        grouped = self._group_candidates(candidates)
+        priorities = sorted(grouped.keys())
+
+        if current.priority not in grouped:
+            return None
+
+        group = grouped[current.priority]
+        if len(group) > 1:
+            key = (requested_model, current.priority)
+            rotation_start = self._last_selected_index.get(key)
+            if rotation_start is None or rotation_start >= len(group):
+                rotation_start = next(
+                    (i for i, c in enumerate(group) if c.provider_id == current.provider_id),
+                    0,
+                )
+
+            rotated = group[rotation_start:] + group[:rotation_start]
+            current_index = next(
+                (i for i, c in enumerate(rotated) if c.provider_id == current.provider_id),
+                -1,
+            )
+            if current_index != -1 and current_index + 1 < len(rotated):
+                return rotated[current_index + 1]
+
+        current_priority_index = priorities.index(current.priority)
+        if current_priority_index + 1 >= len(priorities):
+            return None
+
+        next_priority = priorities[current_priority_index + 1]
+        next_group = grouped[next_priority]
+        return await self._select_from_group(next_group, requested_model, next_priority)
+
+    def reset(self, requested_model: Optional[str] = None) -> None:
+        """
+        Reset counters (for testing)
+
+        Args:
+            requested_model: Specific model name, resets all if None
+        """
+        if requested_model:
+            keys = [key for key in self._counters if key[0] == requested_model]
+            for key in keys:
+                self._counters.pop(key, None)
+                self._last_selected_index.pop(key, None)
+        else:
+            self._counters.clear()
+            self._last_selected_index.clear()
+
+
 class CostFirstStrategy(SelectionStrategy):
     """
     Cost First Strategy
@@ -176,7 +370,12 @@ class CostFirstStrategy(SelectionStrategy):
     Selects providers based on lowest cost for the current request.
     Calculates cost based on input tokens and provider billing configuration.
     Falls back to next lowest cost provider on failure.
+    If multiple providers have the same lowest cost, uses Round Robin to distribute load.
     """
+
+    def __init__(self):
+        """Initialize Strategy"""
+        self._round_robin = RoundRobinStrategy()
 
     def _calculate_input_cost(self, candidate: CandidateProvider, input_tokens: int) -> float:
         """
@@ -259,8 +458,28 @@ class CostFirstStrategy(SelectionStrategy):
         # Sort by cost (lowest first), then by priority, then by provider_id
         candidates_with_cost.sort(key=lambda x: (x[1], x[0].priority, x[0].provider_id))
 
-        selected = candidates_with_cost[0][0]
-        selected_cost = candidates_with_cost[0][1]
+        # Find all candidates with the same lowest cost
+        min_cost = candidates_with_cost[0][1]
+        lowest_cost_candidates = []
+        # Use a small epsilon for float comparison if needed, but costs are likely exact or distinctly different
+        # Using exact match for now as price configuration is usually precise
+        for c, cost in candidates_with_cost:
+            if abs(cost - min_cost) < 1e-9:
+                lowest_cost_candidates.append(c)
+            else:
+                break
+        
+        if len(lowest_cost_candidates) > 1:
+            # Use Round Robin for ties
+            selected = await self._round_robin.select(lowest_cost_candidates, requested_model)
+            selected_cost = min_cost
+            logger.info(
+                f"CostFirstStrategy: Found {len(lowest_cost_candidates)} providers with same lowest cost "
+                f"(${min_cost:.6f}). Using Round Robin selection."
+            )
+        else:
+            selected = candidates_with_cost[0][0]
+            selected_cost = candidates_with_cost[0][1]
 
         logger.info(
             f"CostFirstStrategy: Selected provider {selected.provider_name} (ID: {selected.provider_id}) "

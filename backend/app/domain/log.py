@@ -7,7 +7,7 @@ Defines Request Log related Data Transfer Objects (DTOs).
 from datetime import datetime
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.common.time import ensure_utc
 
@@ -40,7 +40,7 @@ class RequestLogBase(BaseModel):
 
 class RequestLogCreate(RequestLogBase):
     """Create Request Log Model"""
-    
+
     # Retry Count
     retry_count: int = Field(0, description="Retry Count")
     # First Byte Delay (ms)
@@ -59,6 +59,8 @@ class RequestLogCreate(RequestLogBase):
     price_source: Optional[str] = Field(None, description="Price source")
     # Request Headers (Sanitized)
     request_headers: Optional[dict[str, Any]] = Field(None, description="Request Headers")
+    # Response Headers (Sanitized)
+    response_headers: Optional[dict[str, Any]] = Field(None, description="Response Headers")
     # Request Body
     request_body: Optional[dict[str, Any]] = Field(None, description="Request Body")
     # Response Status Code
@@ -73,6 +75,19 @@ class RequestLogCreate(RequestLogBase):
     trace_id: Optional[str] = Field(None, description="Trace ID")
     # Is Stream Request
     is_stream: bool = Field(False, description="Is Stream Request")
+    # Protocol Conversion Fields (for debugging and analysis)
+    # Client request protocol (openai/anthropic)
+    request_protocol: Optional[str] = Field(None, description="Client Request Protocol")
+    # Upstream supplier protocol (openai/anthropic)
+    supplier_protocol: Optional[str] = Field(None, description="Upstream Supplier Protocol")
+    # Converted request body (sent to upstream after protocol conversion)
+    converted_request_body: Optional[dict[str, Any]] = Field(
+        None, description="Converted Request Body (after protocol conversion)"
+    )
+    # Upstream response body (original response before protocol conversion)
+    upstream_response_body: Optional[str] = Field(
+        None, description="Upstream Response Body (before protocol conversion)"
+    )
 
 
 class RequestLogModel(RequestLogCreate):
@@ -80,8 +95,7 @@ class RequestLogModel(RequestLogCreate):
     
     id: int = Field(..., description="Log ID")
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class RequestLogResponse(RequestLogBase):
@@ -101,8 +115,7 @@ class RequestLogResponse(RequestLogBase):
     trace_id: Optional[str] = None
     is_stream: bool = False
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class RequestLogDetailResponse(RequestLogModel):
@@ -110,8 +123,7 @@ class RequestLogDetailResponse(RequestLogModel):
 
     response_body: Optional[Any] = Field(None, description="Response Body (Auto-parsed JSON)")
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class RequestLogQuery(BaseModel):
