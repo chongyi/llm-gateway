@@ -4,7 +4,7 @@ Round Robin Strategy Unit Tests
 
 import pytest
 import asyncio
-from app.services.strategy import RoundRobinStrategy, CostFirstStrategy
+from app.services.strategy import RoundRobinStrategy, CostFirstStrategy, PriorityStrategy
 from app.rules.models import CandidateProvider
 
 
@@ -357,3 +357,93 @@ class TestCostFirstStrategy:
         # 3rd selection (should loop back)
         selected = await self.strategy.select(tie_candidates, "tie-test-model", input_tokens=1000)
         assert selected.provider_id == first_id
+
+
+class TestPriorityStrategy:
+    """Priority Strategy Tests"""
+
+    def setup_method(self):
+        """Setup before test"""
+        self.strategy = PriorityStrategy()
+        self.candidates = [
+            CandidateProvider(
+                provider_id=1,
+                provider_name="Priority0-A",
+                base_url="https://api1.com",
+                protocol="openai",
+                api_key="key1",
+                target_model="model1",
+                priority=0,
+            ),
+            CandidateProvider(
+                provider_id=2,
+                provider_name="Priority0-B",
+                base_url="https://api2.com",
+                protocol="openai",
+                api_key="key2",
+                target_model="model2",
+                priority=0,
+            ),
+            CandidateProvider(
+                provider_id=3,
+                provider_name="Priority1",
+                base_url="https://api3.com",
+                protocol="openai",
+                api_key="key3",
+                target_model="model3",
+                priority=1,
+            ),
+            CandidateProvider(
+                provider_id=4,
+                provider_name="Priority2",
+                base_url="https://api4.com",
+                protocol="openai",
+                api_key="key4",
+                target_model="model4",
+                priority=2,
+            ),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_select_priority_round_robin(self):
+        """Test priority selection with round robin within same priority"""
+        self.strategy.reset()
+        selected = await self.strategy.select(self.candidates, "test-model")
+        assert selected.provider_id == 1
+        selected = await self.strategy.select(self.candidates, "test-model")
+        assert selected.provider_id == 2
+        selected = await self.strategy.select(self.candidates, "test-model")
+        assert selected.provider_id == 1
+
+    @pytest.mark.asyncio
+    async def test_get_next_priority_fallback(self):
+        """Test priority failover order across priority groups"""
+        self.strategy.reset()
+        selected = await self.strategy.select(self.candidates, "test-model")
+        assert selected.provider_id == 1
+
+        next_provider = await self.strategy.get_next(self.candidates, "test-model", selected)
+        assert next_provider.provider_id == 2
+
+        next_provider = await self.strategy.get_next(self.candidates, "test-model", next_provider)
+        assert next_provider.provider_id == 3
+
+        next_provider = await self.strategy.get_next(self.candidates, "test-model", next_provider)
+        assert next_provider.provider_id == 4
+
+        next_provider = await self.strategy.get_next(self.candidates, "test-model", next_provider)
+        assert next_provider is None
+
+    @pytest.mark.asyncio
+    async def test_get_next_rotates_from_late_selection(self):
+        """Test failover when the last selected provider is later in the group"""
+        self.strategy.reset()
+        _ = await self.strategy.select(self.candidates, "test-model")
+        selected = await self.strategy.select(self.candidates, "test-model")
+        assert selected.provider_id == 2
+
+        next_provider = await self.strategy.get_next(self.candidates, "test-model", selected)
+        assert next_provider.provider_id == 1
+
+        next_provider = await self.strategy.get_next(self.candidates, "test-model", next_provider)
+        assert next_provider.provider_id == 3

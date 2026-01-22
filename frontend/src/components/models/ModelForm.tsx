@@ -133,7 +133,11 @@ export function ModelForm({
 
   // Submit form
   const onFormSubmit = (data: FormData) => {
-    const resolvedStrategy = supportsBilling ? data.strategy : 'round_robin';
+    const resolvedStrategy = supportsBilling
+      ? data.strategy
+      : data.strategy === 'cost_first'
+        ? 'round_robin'
+        : data.strategy;
     const submitData: ModelMappingCreate | ModelMappingUpdate = {
       strategy: resolvedStrategy,
       model_type: data.model_type,
@@ -267,7 +271,7 @@ export function ModelForm({
               name="strategy"
               control={control}
               render={({ field }) => (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {/* Round Robin Strategy */}
                   <Card
                     className={`cursor-pointer transition-all duration-200 hover:shadow-md ${
@@ -300,6 +304,43 @@ export function ModelForm({
                         <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs">
                           <span>⚖️</span>
                           <span>Load Balancing</span>
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+
+                  {/* Priority Strategy */}
+                  <Card
+                    className={`cursor-pointer transition-all duration-200 hover:shadow-md ${
+                      field.value === 'priority'
+                        ? 'border-primary border-2 bg-primary/5'
+                        : 'border-border hover:border-primary/50'
+                    }`}
+                    onClick={() => field.onChange('priority')}
+                  >
+                    <div className="p-4 space-y-2">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                          field.value === 'priority'
+                            ? 'border-primary bg-primary'
+                            : 'border-muted-foreground'
+                        }`}>
+                          {field.value === 'priority' && (
+                            <div className="w-2 h-2 rounded-full bg-white"></div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-2xl">🏷️</span>
+                          <span className="font-semibold text-base">Priority</span>
+                        </div>
+                      </div>
+                      <p className="text-sm text-muted-foreground pl-8">
+                        Prefer higher-priority providers, round robin on ties
+                      </p>
+                      <div className="pl-8 pt-1">
+                        <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-xs">
+                          <span>🎯</span>
+                          <span>Priority Routing</span>
                         </div>
                       </div>
                     </div>

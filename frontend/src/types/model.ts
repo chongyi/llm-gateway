@@ -7,7 +7,7 @@ import { RuleSet } from './common';
 import { ProtocolType } from './provider';
 
 /** Selection Strategy Type */
-export type SelectionStrategy = 'round_robin' | 'cost_first';
+export type SelectionStrategy = 'round_robin' | 'cost_first' | 'priority';
 export type ModelType = 'chat' | 'speech' | 'transcription' | 'embedding' | 'images';
 
 /** Model Mapping Entity */

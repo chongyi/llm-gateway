@@ -35,7 +35,7 @@ from app.repositories.provider_repo import ProviderRepository
 from app.repositories.log_repo import LogRepository
 from app.rules import RuleEngine, RuleContext, TokenUsage, CandidateProvider
 from app.services.retry_handler import RetryHandler, AttemptRecord
-from app.services.strategy import RoundRobinStrategy, CostFirstStrategy, SelectionStrategy
+from app.services.strategy import RoundRobinStrategy, CostFirstStrategy, PriorityStrategy, SelectionStrategy
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +80,7 @@ class ProxyService:
     1. Parse request, extract requested_model
     2. Calculate input Token
     3. Rule engine match, get candidate providers
-    4. Round-robin strategy selects provider
+    4. Selection strategy selects provider
     5. Replace model field, forward request
     6. Handle retry and failover
     7. Calculate output Token
@@ -95,6 +95,7 @@ class ProxyService:
         log_repo: LogRepository,
         round_robin_strategy: Optional[SelectionStrategy] = None,
         cost_first_strategy: Optional[SelectionStrategy] = None,
+        priority_strategy: Optional[SelectionStrategy] = None,
     ):
         """
         Initialize Service
@@ -105,6 +106,7 @@ class ProxyService:
             log_repo: Log Repository
             round_robin_strategy: Optional Round Robin Strategy instance
             cost_first_strategy: Optional Cost First Strategy instance
+            priority_strategy: Optional Priority Strategy instance
         """
         self.model_repo = model_repo
         self.provider_repo = provider_repo
@@ -113,19 +115,22 @@ class ProxyService:
         # Strategy selection instances (reused for performance)
         self._round_robin_strategy = round_robin_strategy or RoundRobinStrategy()
         self._cost_first_strategy = cost_first_strategy or CostFirstStrategy()
+        self._priority_strategy = priority_strategy or PriorityStrategy()
 
     def _get_strategy(self, strategy_name: str) -> SelectionStrategy:
         """
         Get strategy instance based on strategy name
 
         Args:
-            strategy_name: Strategy name ("round_robin" or "cost_first")
+            strategy_name: Strategy name ("round_robin", "cost_first", or "priority")
 
         Returns:
             SelectionStrategy: Strategy instance
         """
         if strategy_name == "cost_first":
             return self._cost_first_strategy
+        if strategy_name == "priority":
+            return self._priority_strategy
         else:
             # Default to round_robin for unknown strategies
             return self._round_robin_strategy

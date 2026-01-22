@@ -12,7 +12,7 @@ from typing_extensions import Literal
 
 
 BillingMode = Literal["token_flat", "token_tiered", "per_request"]
-SelectionStrategyType = Literal["round_robin", "cost_first"]
+SelectionStrategyType = Literal["round_robin", "cost_first", "priority"]
 ModelType = Literal["chat", "speech", "transcription", "embedding", "images"]
 
 
@@ -35,7 +35,7 @@ class ModelMappingBase(BaseModel):
     requested_model: str = Field(
         ..., min_length=1, max_length=100, description="Requested Model Name"
     )
-    # Selection Strategy: round_robin or cost_first
+    # Selection Strategy: round_robin / cost_first / priority
     strategy: SelectionStrategyType = Field("round_robin", description="Selection Strategy")
     # Model Type: chat / speech / transcription / embedding / images
     model_type: ModelType = Field("chat", description="Model Type")

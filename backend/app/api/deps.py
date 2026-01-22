@@ -27,12 +27,14 @@ from app.services import (
     ProxyService,
     RoundRobinStrategy,
     CostFirstStrategy,
+    PriorityStrategy,
 )
 
 
 # Singleton strategies
 _round_robin_strategy = RoundRobinStrategy()
 _cost_first_strategy = CostFirstStrategy()
+_priority_strategy = PriorityStrategy()
 
 
 async def get_db():
@@ -110,6 +112,7 @@ def get_proxy_service(db: DbSession) -> ProxyService:
         log_repo, 
         round_robin_strategy=_round_robin_strategy,
         cost_first_strategy=_cost_first_strategy,
+        priority_strategy=_priority_strategy,
     )
 
 

@@ -487,7 +487,7 @@ Create Model Mapping
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | requested_model | string | Yes | Requested model name, Primary Key |
-| strategy | string | No | Selection strategy, default round_robin |
+| strategy | string | No | Selection strategy (round_robin/cost_first/priority), default round_robin |
 | model_type | string | No | Model type: chat/audio/embedding/images, default chat |
 | matching_rules | object | No | Model level matching rules |
 | capabilities | object | No | Model capabilities description |

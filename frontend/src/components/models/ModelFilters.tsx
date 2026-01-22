@@ -109,6 +109,7 @@ export function ModelFilters({ filters, onFilterChange }: ModelFiltersProps) {
                 <SelectItem value="all">All</SelectItem>
                 <SelectItem value="round_robin">Round Robin</SelectItem>
                 <SelectItem value="cost_first">Cost First</SelectItem>
+                <SelectItem value="priority">Priority</SelectItem>
               </SelectContent>
             </Select>
           </div>

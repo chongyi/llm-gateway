@@ -88,7 +88,7 @@ class ModelMapping(Base):
     requested_model: Mapped[str] = mapped_column(
         String(100), primary_key=True, nullable=False
     )
-    # Selection strategy: round_robin or cost_first
+    # Selection strategy: round_robin / cost_first / priority
     strategy: Mapped[str] = mapped_column(String(50), default="round_robin")
     # Model type: chat / speech / transcription / embedding / images
     model_type: Mapped[str] = mapped_column(String(50), default="chat")

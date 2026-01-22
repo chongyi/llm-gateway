@@ -71,7 +71,11 @@ export function ModelList({
               </TableCell>
               <TableCell>
                 <Badge variant="outline">
-                  {model.strategy === 'cost_first' ? 'Cost First' : 'Round Robin'}
+                  {model.strategy === 'cost_first'
+                    ? 'Cost First'
+                    : model.strategy === 'priority'
+                      ? 'Priority'
+                      : 'Round Robin'}
                 </Badge>
               </TableCell>
               <TableCell>
