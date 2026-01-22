@@ -53,6 +53,9 @@ export function JsonViewer({
 
   // Format JSON string
   const jsonString = (() => {
+    if (typeof normalizedData === 'string') {
+      return normalizedData;
+    }
     try {
       return JSON.stringify(normalizedData, null, 2) ?? String(normalizedData);
     } catch {
