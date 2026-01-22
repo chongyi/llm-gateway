@@ -14,8 +14,10 @@ import {
   ArrowRight,
   Check,
   Clock,
+  Columns,
   Copy,
   Play,
+  Rows,
   Server,
   Shield,
   Waves,
@@ -34,6 +36,7 @@ interface LogDetailProps {
  */
 export function LogDetail({ log }: LogDetailProps) {
   const [activeTab, setActiveTab] = useState<'request' | 'response' | 'headers'>('request');
+  const [layout, setLayout] = useState<'vertical' | 'horizontal'>('vertical');
   const [traceCopied, setTraceCopied] = useState(false);
 
   const responseStatus = log?.response_status;
@@ -232,6 +235,17 @@ export function LogDetail({ log }: LogDetailProps) {
                 <span className="text-muted-foreground">Status</span>
                 <span className="ml-2 font-medium">{log.response_status ?? 'Unknown'}</span>
               </div>
+              {log.request_protocol && log.supplier_protocol && log.request_protocol !== log.supplier_protocol && (
+                <>
+                  <ArrowRight className="h-4 w-4 text-muted-foreground" suppressHydrationWarning />
+                  <div className="inline-flex items-center rounded-md border bg-background px-2 py-1">
+                    <span className="text-muted-foreground">Protocol</span>
+                    <span className="ml-2 font-medium">
+                      {log.request_protocol} → {log.supplier_protocol}
+                    </span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </CardContent>
@@ -262,31 +276,105 @@ export function LogDetail({ log }: LogDetailProps) {
             </div>
           </div>
 
-          <div className="inline-flex w-full rounded-lg border bg-muted/30 p-1 sm:w-auto">
-            <button className={tabButtonClass('request')} onClick={() => setActiveTab('request')}>
-              Request
-            </button>
-            <button className={tabButtonClass('response')} onClick={() => setActiveTab('response')}>
-              Response
-            </button>
-            <button className={tabButtonClass('headers')} onClick={() => setActiveTab('headers')}>
-              Headers
-            </button>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+            {(activeTab === 'request' || activeTab === 'response') && (
+              <div className="inline-flex rounded-lg border bg-muted/30 p-1">
+                <button
+                  onClick={() => setLayout('vertical')}
+                  className={`inline-flex items-center rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
+                    layout === 'vertical'
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  title="Vertical Layout"
+                >
+                  <Rows className="h-3.5 w-3.5" suppressHydrationWarning />
+                </button>
+                <button
+                  onClick={() => setLayout('horizontal')}
+                  className={`inline-flex items-center rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
+                    layout === 'horizontal'
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  title="Horizontal Layout"
+                >
+                  <Columns className="h-3.5 w-3.5" suppressHydrationWarning />
+                </button>
+              </div>
+            )}
+            <div className="inline-flex w-full rounded-lg border bg-muted/30 p-1 sm:w-auto">
+              <button className={tabButtonClass('request')} onClick={() => setActiveTab('request')}>
+                Request
+              </button>
+              <button className={tabButtonClass('response')} onClick={() => setActiveTab('response')}>
+                Response
+              </button>
+              <button className={tabButtonClass('headers')} onClick={() => setActiveTab('headers')}>
+                Headers
+              </button>
+            </div>
           </div>
         </CardHeader>
 
         <CardContent>
           {activeTab === 'request' && (
-            <div className="space-y-3">
-              <div className="text-sm font-medium">Request Body</div>
-              <JsonViewer data={log.request_body} maxHeight="65vh" />
+            <div className={layout === 'horizontal' && log.converted_request_body ? 'grid grid-cols-1 gap-6 lg:grid-cols-2' : 'space-y-6'}>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-medium">Original Request</div>
+                  {log.request_protocol && (
+                    <Badge variant="outline" className="font-mono text-xs">
+                      {log.request_protocol}
+                    </Badge>
+                  )}
+                </div>
+                <JsonViewer data={log.request_body} maxHeight={layout === 'horizontal' ? '65vh' : '45vh'} />
+              </div>
+
+              {log.converted_request_body && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-medium">Converted Request (Upstream)</div>
+                    {log.supplier_protocol && (
+                      <Badge variant="outline" className="font-mono text-xs">
+                        {log.supplier_protocol}
+                      </Badge>
+                    )}
+                  </div>
+                  <JsonViewer data={log.converted_request_body} maxHeight={layout === 'horizontal' ? '65vh' : '45vh'} />
+                </div>
+              )}
             </div>
           )}
 
           {activeTab === 'response' && (
-            <div className="space-y-3">
-              <div className="text-sm font-medium">Response Body</div>
-              <JsonViewer data={log.response_body || {}} maxHeight="65vh" />
+            <div className={layout === 'horizontal' && log.upstream_response_body ? 'grid grid-cols-1 gap-6 lg:grid-cols-2' : 'space-y-6'}>
+              {log.upstream_response_body && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-medium">Original Response (Upstream)</div>
+                    {log.supplier_protocol && (
+                      <Badge variant="outline" className="font-mono text-xs">
+                        {log.supplier_protocol}
+                      </Badge>
+                    )}
+                  </div>
+                  <JsonViewer data={log.upstream_response_body} maxHeight={layout === 'horizontal' ? '65vh' : '45vh'} />
+                </div>
+              )}
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-medium">Converted Response (Client)</div>
+                  {log.request_protocol && (
+                    <Badge variant="outline" className="font-mono text-xs">
+                      {log.request_protocol}
+                    </Badge>
+                  )}
+                </div>
+                <JsonViewer data={log.response_body || {}} maxHeight={layout === 'horizontal' ? '65vh' : '45vh'} />
+              </div>
             </div>
           )}
 

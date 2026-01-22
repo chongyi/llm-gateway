@@ -869,13 +869,7 @@ class ProxyService:
                     ensure_ascii=False,
                     indent=2,
                 )
-                combined_body = (
-                    "Original:\n---\n"
-                    + raw_stream_text
-                    + "\n---\n\nFinal Response (After reconstruction):\n---\n"
-                    + reconstructed_body
-                    + "\n---"
-                )
+                combined_body = raw_stream_text
                 log_data = RequestLogCreate(
                     request_time=request_time,
                     api_key_id=api_key_id,
