@@ -121,6 +121,10 @@ def _run_migrations(sync_conn) -> None:
             "input_cost": "input_cost NUMERIC(12,4)",
             "output_cost": "output_cost NUMERIC(12,4)",
             "price_source": "price_source VARCHAR(50)",
+            "request_protocol": "request_protocol VARCHAR(50)",
+            "supplier_protocol": "supplier_protocol VARCHAR(50)",
+            "converted_request_body": "converted_request_body JSON",
+            "upstream_response_body": "upstream_response_body TEXT",
         },
     )
     ensure_columns(

@@ -76,6 +76,10 @@ class SQLAlchemyLogRepository(LogRepository):
             matched_provider_count=entity.matched_provider_count,
             trace_id=entity.trace_id,
             is_stream=entity.is_stream,
+            request_protocol=entity.request_protocol,
+            supplier_protocol=entity.supplier_protocol,
+            converted_request_body=entity.converted_request_body,
+            upstream_response_body=entity.upstream_response_body,
         )
     
     async def create(self, data: RequestLogCreate) -> RequestLogModel:
@@ -105,6 +109,10 @@ class SQLAlchemyLogRepository(LogRepository):
             error_info=data.error_info,
             trace_id=data.trace_id,
             is_stream=data.is_stream,
+            request_protocol=data.request_protocol,
+            supplier_protocol=data.supplier_protocol,
+            converted_request_body=data.converted_request_body,
+            upstream_response_body=data.upstream_response_body,
         )
         self.session.add(entity)
         await self.session.commit()

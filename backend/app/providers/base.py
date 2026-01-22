@@ -155,7 +155,7 @@ class ProviderClient(ABC):
         new_headers = dict(headers)
         
         # Remove original authentication headers and auto-generated headers
-        keys_to_remove = ["authorization", "x-api-key", "api-key", "content-length", "host", "content-type"]
+        keys_to_remove = ["authorization", "x-api-key", "api-key", "content-length", "host", "content-type", "accept-encoding"]
         for key in list(new_headers.keys()):
             if key.lower() in keys_to_remove:
                 del new_headers[key]

@@ -112,7 +112,7 @@ class ModelMapping(Base):
     
     # Relationship: Provider mappings under this model
     providers: Mapped[list["ModelMappingProvider"]] = relationship(
-        "ModelMappingProvider", back_populates="model_mapping"
+        "ModelMappingProvider", back_populates="model_mapping", cascade="all, delete-orphan"
     )
 
 
