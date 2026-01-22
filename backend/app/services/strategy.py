@@ -107,15 +107,41 @@ class RoundRobinStrategy(SelectionStrategy):
         if not candidates:
             return None
         
+        # Calculate total weight
+        total_weight = sum(c.weight for c in candidates)
+        if total_weight <= 0:
+            # Fallback to simple round robin if weights are invalid
+            total_weight = len(candidates)
+            use_simple_rr = True
+        else:
+            use_simple_rr = False
+
         async with self.lock:
             # Get current count
             counter = self._counters.get(requested_model, 0)
-            # Select provider
-            index = counter % len(candidates)
+            
+            if use_simple_rr:
+                index = counter % len(candidates)
+                selected = candidates[index]
+            else:
+                # Weighted selection
+                current_val = counter % total_weight
+                selected = None
+                cumulative_weight = 0
+                for candidate in candidates:
+                    cumulative_weight += candidate.weight
+                    if current_val < cumulative_weight:
+                        selected = candidate
+                        break
+                
+                # Should not happen if logic is correct
+                if selected is None:
+                    selected = candidates[0]
+
             # Update count
             self._counters[requested_model] = counter + 1
         
-        return candidates[index]
+        return selected
     
     async def get_next(
         self,
@@ -208,12 +234,39 @@ class PriorityStrategy(SelectionStrategy):
         priority: int,
     ) -> CandidateProvider:
         key = (requested_model, priority)
+        
+        # Calculate total weight
+        total_weight = sum(c.weight for c in group)
+        if total_weight <= 0:
+            total_weight = len(group)
+            use_simple_rr = True
+        else:
+            use_simple_rr = False
+            
         async with self.lock:
             counter = self._counters.get(key, 0)
-            index = counter % len(group)
+            
+            if use_simple_rr:
+                index = counter % len(group)
+                selected = group[index]
+            else:
+                current_val = counter % total_weight
+                selected = None
+                cumulative_weight = 0
+                for i, candidate in enumerate(group):
+                    cumulative_weight += candidate.weight
+                    if current_val < cumulative_weight:
+                        selected = candidate
+                        index = i
+                        break
+                
+                if selected is None:
+                    selected = group[0]
+                    index = 0
+
             self._counters[key] = counter + 1
             self._last_selected_index[key] = index
-        return group[index]
+        return selected
 
     async def select(
         self,
