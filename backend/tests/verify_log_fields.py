@@ -4,6 +4,7 @@ import pytest_asyncio
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
+from app.common.time import utc_now
 from app.db.models import Base
 from app.domain.log import RequestLogCreate
 from app.repositories.sqlalchemy.log_repo import SQLAlchemyLogRepository
@@ -26,7 +27,7 @@ async def test_create_log_with_protocol_fields(db_session):
     repo = SQLAlchemyLogRepository(db_session)
     
     log_data = RequestLogCreate(
-        request_time=datetime.utcnow(),
+        request_time=utc_now(),
         request_protocol="openai",
         supplier_protocol="anthropic",
         converted_request_body={"model": "claude-3"},

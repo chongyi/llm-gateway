@@ -7,7 +7,7 @@ Defines Model Mapping and Model-Provider Mapping related Data Transfer Objects (
 from datetime import datetime
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing_extensions import Literal
 
 
@@ -79,8 +79,7 @@ class ModelMapping(ModelMappingBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ModelMappingResponse(ModelMapping):
@@ -91,8 +90,7 @@ class ModelMappingResponse(ModelMapping):
     # Associated Provider List (Returned in detail query)
     providers: Optional[list["ModelMappingProviderResponse"]] = None
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ============ Model-Provider Mapping ============
@@ -174,8 +172,7 @@ class ModelMappingProvider(ModelMappingProviderBase):
     created_at: datetime
     updated_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ModelMappingProviderResponse(ModelMappingProvider):
@@ -186,8 +183,7 @@ class ModelMappingProviderResponse(ModelMappingProvider):
     # Provider Protocol Type: openai or anthropic
     provider_protocol: Optional[str] = Field(None, description="Provider Protocol Type")
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ModelProviderExport(BaseModel):

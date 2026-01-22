@@ -7,7 +7,7 @@ Defines Provider related Data Transfer Objects (DTOs).
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
 
 class ProviderBase(BaseModel):
@@ -62,8 +62,7 @@ class Provider(ProviderBase):
     created_at: datetime = Field(..., description="Creation Time")
     updated_at: datetime = Field(..., description="Update Time")
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ProviderResponse(ProviderBase):
@@ -78,8 +77,7 @@ class ProviderResponse(ProviderBase):
     created_at: datetime = Field(..., description="Creation Time")
     updated_at: datetime = Field(..., description="Update Time")
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ProviderExport(ProviderCreate):

@@ -26,6 +26,8 @@ from sqlalchemy import (
 from sqlalchemy.dialects.sqlite import JSON as SQLiteJSON
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
+from app.common.time import utc_now_naive
+
 
 class Base(DeclarativeBase):
     """SQLAlchemy ORM Base Class"""
@@ -62,11 +64,11 @@ class ServiceProvider(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     # Creation Time
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, nullable=False
+        DateTime, default=utc_now_naive, nullable=False
     )
     # Update Time
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+        DateTime, default=utc_now_naive, onupdate=utc_now_naive, nullable=False
     )
     
     # Relationship: Model mappings under this provider
@@ -103,11 +105,11 @@ class ModelMapping(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     # Creation Time
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, nullable=False
+        DateTime, default=utc_now_naive, nullable=False
     )
     # Update Time
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+        DateTime, default=utc_now_naive, onupdate=utc_now_naive, nullable=False
     )
     
     # Relationship: Provider mappings under this model
@@ -162,11 +164,11 @@ class ModelMappingProvider(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     # Creation Time
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, nullable=False
+        DateTime, default=utc_now_naive, nullable=False
     )
     # Update Time
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+        DateTime, default=utc_now_naive, onupdate=utc_now_naive, nullable=False
     )
     
     # Unique Constraint: Only one mapping per provider for the same model
@@ -201,7 +203,7 @@ class ApiKey(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     # Creation Time
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, nullable=False
+        DateTime, default=utc_now_naive, nullable=False
     )
     # Last Used Time
     last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)

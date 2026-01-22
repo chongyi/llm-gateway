@@ -7,7 +7,7 @@ Defines Request Log related Data Transfer Objects (DTOs).
 from datetime import datetime
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.common.time import ensure_utc
 
@@ -95,8 +95,7 @@ class RequestLogModel(RequestLogCreate):
     
     id: int = Field(..., description="Log ID")
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class RequestLogResponse(RequestLogBase):
@@ -116,8 +115,7 @@ class RequestLogResponse(RequestLogBase):
     trace_id: Optional[str] = None
     is_stream: bool = False
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class RequestLogDetailResponse(RequestLogModel):
@@ -125,8 +123,7 @@ class RequestLogDetailResponse(RequestLogModel):
 
     response_body: Optional[Any] = Field(None, description="Response Body (Auto-parsed JSON)")
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class RequestLogQuery(BaseModel):
