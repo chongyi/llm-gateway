@@ -618,6 +618,7 @@ class ProxyService:
             "request_protocol": request_protocol,
             "supplier_protocol": None,
             "converted_request_body": None,
+            "upstream_chunks": [],
         }
 
         # 8. Execute streaming request
@@ -679,8 +680,13 @@ class ProxyService:
                     return
 
                 async def upstream_bytes() -> AsyncGenerator[bytes, None]:
+                    # Reset upstream chunks for the current attempt
+                    stream_conversion_data["upstream_chunks"] = []
+                    
+                    stream_conversion_data["upstream_chunks"].append(first_chunk)
                     yield first_chunk
                     async for chunk, _ in upstream_gen:
+                        stream_conversion_data["upstream_chunks"].append(chunk)
                         yield chunk
 
                 try:
@@ -903,8 +909,12 @@ class ProxyService:
                     request_protocol=stream_conversion_data.get("request_protocol"),
                     supplier_protocol=stream_conversion_data.get("supplier_protocol"),
                     converted_request_body=_smart_truncate(stream_conversion_data.get("converted_request_body")),
-                    # For stream, upstream_response_body is the raw stream which is already in combined_body
-                    upstream_response_body=raw_stream_text if raw_stream_text else None,
+                    # For stream, upstream_response_body is the raw stream captured from upstream
+                    upstream_response_body=(
+                        b"".join(stream_conversion_data["upstream_chunks"]).decode("utf-8", errors="replace")
+                        if stream_conversion_data.get("upstream_chunks")
+                        else (raw_stream_text if raw_stream_text else None)
+                    ),
                 )
                 
                 # DEBUG: Log request details
