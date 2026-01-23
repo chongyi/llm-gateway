@@ -316,6 +316,7 @@ class ProxyService:
             headers=headers,
             body=body,
         )
+        token_counter = get_token_counter(protocol)
 
         # DEBUG: Log matched providers
         candidates_info = [

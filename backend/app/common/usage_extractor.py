@@ -204,9 +204,6 @@ def extract_usage_details(body: Any) -> Optional[UsageDetails]:
 
 
 def extract_output_tokens(body: Any) -> Optional[int]:
-
-
-def extract_output_tokens(body: Any) -> Optional[int]:
     """
     Extract output token count from a response body.
 
