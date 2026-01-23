@@ -20,7 +20,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { ArrowLeft, Plus, Pencil, Trash2 } from 'lucide-react';
-import { ModelProviderForm } from '@/components/models';
+import { ModelProviderForm, ModelMatchDialog } from '@/components/models';
 import { ConfirmDialog, LoadingSpinner, ErrorState } from '@/components/common';
 import {
   useModel,
@@ -137,6 +137,7 @@ function ModelDetailContent() {
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingMapping, setEditingMapping] = useState<ModelMappingProvider | null>(null);
+  const [matchDialogOpen, setMatchDialogOpen] = useState(false);
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingMapping, setDeletingMapping] = useState<ModelMappingProvider | null>(null);
@@ -325,10 +326,19 @@ function ModelDetailContent() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Provider Configuration</CardTitle>
-          <Button onClick={handleAddProvider} size="sm">
-            <Plus className="mr-2 h-4 w-4" suppressHydrationWarning />
-            Add Provider
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setMatchDialogOpen(true)}
+            >
+              Test
+            </Button>
+            <Button onClick={handleAddProvider} size="sm">
+              <Plus className="mr-2 h-4 w-4" suppressHydrationWarning />
+              Add Provider
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {model.providers && model.providers.length > 0 ? (
@@ -490,6 +500,12 @@ function ModelDetailContent() {
         modelType={modelType}
         onSubmit={handleSubmit}
         loading={createMutation.isPending || updateMutation.isPending}
+      />
+
+      <ModelMatchDialog
+        open={matchDialogOpen}
+        onOpenChange={setMatchDialogOpen}
+        requestedModel={requestedModel}
       />
 
       <ConfirmDialog
