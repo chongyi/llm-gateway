@@ -54,5 +54,19 @@ export interface ProviderListParams {
   protocol?: string;
 }
 
+/** Provider Model List Response */
+export interface ProviderModelListResponse {
+  provider_id: number;
+  provider_name: string;
+  protocol: ProtocolType;
+  models: string[];
+  success: boolean;
+  error?: {
+    message: string;
+    code: string;
+    details?: Record<string, unknown>;
+  };
+}
+
 /** Provider Export Entity (includes API key) */
 export type ProviderExport = ProviderCreate;
