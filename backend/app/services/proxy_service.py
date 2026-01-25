@@ -28,14 +28,12 @@ from app.common.time import utc_now
 from app.common.usage_extractor import extract_usage_details
 from app.common.proxy import build_proxy_config
 from app.domain.log import RequestLogCreate
-from app.db.session import AsyncSessionLocal
 from app.domain.model import ModelMapping, ModelMappingProviderResponse
 from app.domain.provider import Provider
 from app.providers import get_provider_client, ProviderResponse
 from app.repositories.model_repo import ModelRepository
 from app.repositories.provider_repo import ProviderRepository
 from app.repositories.log_repo import LogRepository
-from app.repositories.sqlalchemy.log_repo import SQLAlchemyLogRepository
 from app.rules import RuleEngine, RuleContext, TokenUsage, CandidateProvider
 from app.services.retry_handler import RetryHandler, AttemptRecord
 from app.services.strategy import RoundRobinStrategy, CostFirstStrategy, PriorityStrategy, SelectionStrategy
@@ -121,9 +119,7 @@ class ProxyService:
         self._priority_strategy = priority_strategy or PriorityStrategy()
 
     async def _write_log(self, log_data: RequestLogCreate) -> None:
-        async with AsyncSessionLocal() as session:
-            repo = SQLAlchemyLogRepository(session)
-            await repo.create(log_data)
+        await self.log_repo.create(log_data)
 
     def _get_strategy(self, strategy_name: str) -> SelectionStrategy:
         """

@@ -529,6 +529,487 @@ def _translate_openai_response_to_anthropic(body: dict[str, Any], target_model: 
     }
 
 
+def _build_anthropic_request_from_openai(
+    *, openai_body: dict[str, Any], target_model: str
+) -> dict[str, Any]:
+    openai_body = _normalize_openai_tooling_fields(copy.deepcopy(openai_body))
+    openai_body["model"] = target_model
+    messages = openai_body.get("messages")
+    if not isinstance(messages, list):
+        raise ServiceError(message="OpenAI request missing 'messages'", code="invalid_request")
+
+    has_system = any(isinstance(m, dict) and m.get("role") == "system" for m in messages)
+    for m in messages:
+        if isinstance(m, dict) and m.get("role") == "developer":
+            m["role"] = "user" if has_system else "system"
+
+    optional_params = {k: v for k, v in openai_body.items() if k not in ("model", "messages")}
+    if "max_tokens" not in optional_params and "max_completion_tokens" in optional_params:
+        optional_params["max_tokens"] = optional_params["max_completion_tokens"]
+    if "max_tokens" not in optional_params:
+        optional_params["max_tokens"] = 4096
+
+    anthropic_body = AnthropicConfig().transform_request(
+        model=target_model,
+        messages=messages,
+        optional_params=optional_params,
+        litellm_params={},
+        headers={},
+    )
+    if isinstance(anthropic_body, dict):
+        anthropic_body = _ensure_anthropic_tooling_fields(
+            source_openai_body=openai_body, target_anthropic_body=anthropic_body
+        )
+        anthropic_body = _ensure_anthropic_tool_calls(
+            source_openai_body=openai_body, target_anthropic_body=anthropic_body
+        )
+        user_id = openai_body.get("user")
+        if isinstance(user_id, str) and user_id:
+            metadata = anthropic_body.get("metadata")
+            if not isinstance(metadata, dict):
+                metadata = {}
+            if "user_id" not in metadata:
+                metadata["user_id"] = user_id
+            anthropic_body["metadata"] = metadata
+    return anthropic_body
+
+
+def _convert_request_identity(
+    *, request_protocol: str, path: str, body: dict[str, Any], target_model: str
+) -> tuple[str, dict[str, Any]]:
+    new_body = copy.deepcopy(body)
+    if request_protocol == OPENAI_PROTOCOL:
+        new_body = _normalize_openai_tooling_fields(new_body)
+    new_body["model"] = target_model
+    if request_protocol == ANTHROPIC_PROTOCOL and path == "/v1/messages":
+        if new_body.get("max_tokens") is None:
+            if new_body.get("max_completion_tokens") is not None:
+                new_body["max_tokens"] = new_body["max_completion_tokens"]
+            else:
+                new_body["max_tokens"] = 4096
+    return path, new_body
+
+
+def _convert_request_openai_to_openai_responses(
+    *, path: str, body: dict[str, Any], target_model: str
+) -> tuple[str, dict[str, Any]]:
+    if path == "/v1/chat/completions":
+        openai_body = _normalize_openai_tooling_fields(body)
+        responses_body = chat_completions_request_to_responses(openai_body)
+        responses_body["model"] = target_model
+        return "/v1/responses", responses_body
+    if path == "/v1/completions":
+        prompt = body.get("prompt")
+        if prompt is None:
+            raise ServiceError(message="OpenAI request missing 'prompt'", code="invalid_request")
+        responses_body: dict[str, Any] = {"model": target_model, "input": prompt}
+        for key in (
+            "temperature",
+            "top_p",
+            "presence_penalty",
+            "frequency_penalty",
+            "seed",
+            "n",
+            "stop",
+            "stream",
+            "stream_options",
+            "user",
+            "metadata",
+        ):
+            if key in body:
+                responses_body[key] = body[key]
+        max_output_tokens = body.get("max_tokens")
+        if max_output_tokens is not None:
+            responses_body["max_output_tokens"] = max_output_tokens
+        return "/v1/responses", responses_body
+    raise ServiceError(
+        message=f"Unsupported OpenAI endpoint for conversion: {path}",
+        code="unsupported_protocol_conversion",
+    )
+
+
+def _convert_request_openai_responses_to_openai(
+    *, path: str, body: dict[str, Any], target_model: str
+) -> tuple[str, dict[str, Any]]:
+    if path != "/v1/responses":
+        raise ServiceError(
+            message=f"Unsupported OpenAI Responses endpoint for conversion: {path}",
+            code="unsupported_protocol_conversion",
+        )
+    openai_body = responses_request_to_chat_completions(body)
+    openai_body["model"] = target_model
+    openai_body = _normalize_openai_tooling_fields(openai_body)
+    return "/v1/chat/completions", openai_body
+
+
+def _convert_request_openai_to_anthropic(
+    *, path: str, body: dict[str, Any], target_model: str
+) -> tuple[str, dict[str, Any]]:
+    if path != "/v1/chat/completions":
+        raise ServiceError(
+            message=f"Unsupported OpenAI endpoint for conversion: {path}",
+            code="unsupported_protocol_conversion",
+        )
+    anthropic_body = _build_anthropic_request_from_openai(
+        openai_body=body, target_model=target_model
+    )
+    return "/v1/messages", anthropic_body
+
+
+def _convert_request_anthropic_to_openai(
+    *, path: str, body: dict[str, Any], target_model: str
+) -> tuple[str, dict[str, Any]]:
+    if path != "/v1/messages":
+        raise ServiceError(
+            message=f"Unsupported Anthropic endpoint for conversion: {path}",
+            code="unsupported_protocol_conversion",
+        )
+    anthropic_body = copy.deepcopy(body)
+    anthropic_body["model"] = target_model
+    if _HAS_EXPERIMENTAL_PASSTHROUGH:
+        openai_body = AnthropicExperimentalPassThroughConfig().translate_anthropic_to_openai(  # type: ignore[union-attr]
+            anthropic_message_request=anthropic_body  # type: ignore[arg-type]
+        )
+    else:
+        openai_body = _translate_anthropic_to_openai_request(
+            anthropic_body=anthropic_body, target_model=target_model
+        )
+    if isinstance(openai_body, dict):
+        openai_body = _ensure_openai_tooling_fields(
+            source_anthropic_body=anthropic_body, target_openai_body=openai_body
+        )
+    return "/v1/chat/completions", openai_body
+
+
+def _convert_request_openai_responses_to_anthropic(
+    *, path: str, body: dict[str, Any], target_model: str
+) -> tuple[str, dict[str, Any]]:
+    if path != "/v1/responses":
+        raise ServiceError(
+            message=f"Unsupported OpenAI Responses endpoint for conversion: {path}",
+            code="unsupported_protocol_conversion",
+        )
+    openai_body = responses_request_to_chat_completions(body)
+    anthropic_body = _build_anthropic_request_from_openai(
+        openai_body=openai_body, target_model=target_model
+    )
+    return "/v1/messages", anthropic_body
+
+
+def _convert_response_openai_responses_to_openai(
+    body: dict[str, Any], target_model: str
+) -> dict[str, Any]:
+    return responses_response_to_chat_completion(body)
+
+
+def _convert_response_openai_to_openai_responses(
+    body: dict[str, Any], target_model: str
+) -> dict[str, Any]:
+    return chat_completion_to_responses_response(body)
+
+
+def _convert_response_openai_to_anthropic(body: dict[str, Any], target_model: str) -> dict[str, Any]:
+    if _HAS_EXPERIMENTAL_PASSTHROUGH:
+        model_response = ModelResponse(**body)
+        translated = AnthropicExperimentalPassThroughConfig().translate_openai_response_to_anthropic(  # type: ignore[union-attr]
+            response=model_response
+        )
+        return translated.model_dump(exclude_none=True)
+    return _translate_openai_response_to_anthropic(body, target_model)
+
+
+def _convert_response_anthropic_to_openai(body: dict[str, Any], target_model: str) -> dict[str, Any]:
+    dummy_logger = type("DummyLogger", (), {"post_call": lambda *args, **kwargs: None})()
+    response = httpx.Response(200, json=body, headers={})
+    model = body.get("model") or target_model
+    model_response = AnthropicConfig().transform_response(
+        model=model,
+        raw_response=response,
+        model_response=ModelResponse(),
+        logging_obj=dummy_logger,
+        request_data={},
+        messages=[],
+        optional_params={},
+        litellm_params={},
+        encoding=None,
+        api_key="",
+        json_mode=None,
+    )
+    return model_response.model_dump(exclude_none=True)
+
+
+async def _convert_stream_openai_responses_to_openai(
+    *, upstream: AsyncGenerator[bytes, None], model: str
+) -> AsyncGenerator[bytes, None]:
+    async for chunk in responses_sse_to_chat_completions_sse(upstream=upstream, model=model):
+        yield chunk
+
+
+async def _convert_stream_openai_to_openai_responses(
+    *, upstream: AsyncGenerator[bytes, None], model: str
+) -> AsyncGenerator[bytes, None]:
+    async for chunk in chat_completions_sse_to_responses_sse(upstream=upstream, model=model):
+        yield chunk
+
+
+async def _convert_stream_anthropic_to_openai(
+    *, upstream: AsyncGenerator[bytes, None], model: str
+) -> AsyncGenerator[bytes, None]:
+    decoder = SSEDecoder()
+    response_id: Optional[str] = None
+    sent_role = False
+    current_tool_id: Optional[str] = None
+    current_tool_name: Optional[str] = None
+    current_tool_index = 0
+    done = False
+
+    async for chunk in upstream:
+        for payload in decoder.feed(chunk):
+            if not payload:
+                continue
+            if payload.strip() == "[DONE]":
+                continue
+
+            try:
+                data = json.loads(payload)
+            except Exception:
+                continue
+
+            event_type = data.get("type")
+            if event_type == "message_start":
+                message = data.get("message", {})
+                if isinstance(message, dict):
+                    response_id = message.get("id") or response_id
+                continue
+
+            if event_type == "content_block_start":
+                content_block = data.get("content_block", {})
+                if isinstance(content_block, dict):
+                    block_type = content_block.get("type")
+                    if block_type == "text":
+                        text = content_block.get("text") or ""
+                        if text:
+                            delta: dict[str, Any] = {"content": text}
+                            if not sent_role:
+                                delta["role"] = "assistant"
+                                sent_role = True
+                            yield _encode_sse_json(
+                                {
+                                    "id": response_id or f"chatcmpl-{uuid.uuid4().hex}",
+                                    "object": "chat.completion.chunk",
+                                    "created": int(time.time()),
+                                    "model": model,
+                                    "choices": [{"index": 0, "delta": delta, "finish_reason": None}],
+                                }
+                            )
+                    elif block_type == "tool_use":
+                        current_tool_id = content_block.get("id")
+                        current_tool_name = content_block.get("name")
+                        if isinstance(data.get("index"), int):
+                            current_tool_index = data["index"]
+                        tool_args = content_block.get("input")
+                        if isinstance(tool_args, dict):
+                            arguments = json.dumps(tool_args, ensure_ascii=False)
+                        elif isinstance(tool_args, str):
+                            arguments = tool_args
+                        else:
+                            arguments = "{}"
+                        delta = {
+                            "tool_calls": [
+                                {
+                                    "index": current_tool_index,
+                                    "id": current_tool_id,
+                                    "type": "function",
+                                    "function": {"name": current_tool_name, "arguments": arguments},
+                                }
+                            ]
+                        }
+                        if not sent_role:
+                            delta["role"] = "assistant"
+                            sent_role = True
+                        yield _encode_sse_json(
+                            {
+                                "id": response_id or f"chatcmpl-{uuid.uuid4().hex}",
+                                "object": "chat.completion.chunk",
+                                "created": int(time.time()),
+                                "model": model,
+                                "choices": [{"index": 0, "delta": delta, "finish_reason": None}],
+                            }
+                        )
+                continue
+
+            if event_type == "content_block_delta":
+                delta_obj = data.get("delta")
+                if isinstance(delta_obj, dict):
+                    delta_type = delta_obj.get("type")
+                    if delta_type == "text_delta":
+                        text = delta_obj.get("text") or ""
+                        if text:
+                            delta: dict[str, Any] = {"content": text}
+                            if not sent_role:
+                                delta["role"] = "assistant"
+                                sent_role = True
+                            yield _encode_sse_json(
+                                {
+                                    "id": response_id or f"chatcmpl-{uuid.uuid4().hex}",
+                                    "object": "chat.completion.chunk",
+                                    "created": int(time.time()),
+                                    "model": model,
+                                    "choices": [{"index": 0, "delta": delta, "finish_reason": None}],
+                                }
+                            )
+                    elif delta_type == "input_json_delta":
+                        partial_json = delta_obj.get("partial_json") or ""
+                        if partial_json:
+                            delta: dict[str, Any] = {
+                                "tool_calls": [
+                                    {
+                                        "index": current_tool_index,
+                                        "id": current_tool_id,
+                                        "type": "function",
+                                        "function": {"name": current_tool_name, "arguments": partial_json},
+                                    }
+                                ]
+                            }
+                            if not sent_role:
+                                delta["role"] = "assistant"
+                                sent_role = True
+                            yield _encode_sse_json(
+                                {
+                                    "id": response_id or f"chatcmpl-{uuid.uuid4().hex}",
+                                    "object": "chat.completion.chunk",
+                                    "created": int(time.time()),
+                                    "model": model,
+                                    "choices": [{"index": 0, "delta": delta, "finish_reason": None}],
+                                }
+                            )
+                continue
+
+            if event_type == "message_delta":
+                delta_dict = data.get("delta")
+                stop_reason = None
+                if isinstance(delta_dict, dict):
+                    stop_reason = delta_dict.get("stop_reason")
+                finish_reason = _map_anthropic_finish_reason_to_openai(stop_reason)
+                yield _encode_sse_json(
+                    {
+                        "id": response_id or f"chatcmpl-{uuid.uuid4().hex}",
+                        "object": "chat.completion.chunk",
+                        "created": int(time.time()),
+                        "model": model,
+                        "choices": [{"index": 0, "delta": {}, "finish_reason": finish_reason}],
+                    }
+                )
+                yield _encode_sse_data("[DONE]")
+                done = True
+                continue
+
+            if event_type == "message_stop":
+                if not done:
+                    yield _encode_sse_data("[DONE]")
+                    done = True
+                continue
+
+    if not done:
+        yield _encode_sse_data("[DONE]")
+
+
+async def _convert_stream_openai_to_anthropic(
+    *, upstream: AsyncGenerator[bytes, None], model: str
+) -> AsyncGenerator[bytes, None]:
+    decoder = SSEDecoder()
+
+    sent_message_start = False
+    sent_content_block_start = False
+    sent_content_block_finish = False
+    sent_message_stop = False
+    holding: Optional[dict[str, Any]] = None
+
+    async for chunk in upstream:
+        for payload in decoder.feed(chunk):
+            if not payload:
+                continue
+            if payload.strip() == "[DONE]":
+                continue
+
+            if not sent_message_start:
+                sent_message_start = True
+                yield _encode_sse_json(
+                    {
+                        "type": "message_start",
+                        "message": {
+                            "id": f"msg_{uuid.uuid4().hex}",
+                            "type": "message",
+                            "role": "assistant",
+                            "content": [],
+                            "model": model,
+                            "stop_reason": None,
+                            "stop_sequence": None,
+                            "usage": {"input_tokens": 0, "output_tokens": 0},
+                        },
+                    }
+                )
+            if not sent_content_block_start:
+                sent_content_block_start = True
+                yield _encode_sse_json(
+                    {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}
+                )
+
+            try:
+                data = json.loads(payload)
+            except Exception:
+                continue
+
+            try:
+                openai_chunk = ChatCompletionChunk(**data)
+            except Exception:
+                continue
+
+            if _HAS_EXPERIMENTAL_PASSTHROUGH:
+                cfg = AnthropicExperimentalPassThroughConfig()  # type: ignore[call-arg]
+                processed = cfg.translate_streaming_openai_response_to_anthropic(response=openai_chunk)  # type: ignore[union-attr]
+            else:
+                # Minimal fallback: translate content delta + finish into Anthropic stream events
+                choice = openai_chunk.choices[0] if openai_chunk.choices else None
+                if choice is None:
+                    continue
+                if choice.delta and getattr(choice.delta, "content", None):
+                    processed = {
+                        "type": "content_block_delta",
+                        "index": choice.index,
+                        "delta": {"type": "text_delta", "text": choice.delta.content},
+                    }
+                elif choice.finish_reason is not None:
+                    processed = {
+                        "type": "message_delta",
+                        "delta": {"stop_reason": _map_openai_finish_reason_to_anthropic(choice.finish_reason)},
+                        "usage": {"output_tokens": 0},
+                    }
+                else:
+                    continue
+
+            if processed.get("type") == "message_delta" and sent_content_block_finish is False:
+                holding = processed
+                sent_content_block_finish = True
+                yield _encode_sse_json({"type": "content_block_stop", "index": 0})
+                continue
+
+            if holding is not None:
+                yield _encode_sse_json(holding)
+                holding = processed
+                continue
+
+            yield _encode_sse_json(processed)
+
+    if holding is not None:
+        yield _encode_sse_json(holding)
+        holding = None
+
+    if sent_message_stop is False:
+        sent_message_stop = True
+        yield _encode_sse_json({"type": "message_stop"})
+
+
 def convert_request_for_supplier(
     *,
     request_protocol: str,
@@ -549,178 +1030,20 @@ def convert_request_for_supplier(
     supplier_protocol = normalize_protocol(supplier_protocol)
 
     if request_protocol == supplier_protocol:
-        new_body = copy.deepcopy(body)
-        if request_protocol == OPENAI_PROTOCOL:
-            new_body = _normalize_openai_tooling_fields(new_body)
-        new_body["model"] = target_model
-        if request_protocol == ANTHROPIC_PROTOCOL and path == "/v1/messages":
-            if new_body.get("max_tokens") is None:
-                if new_body.get("max_completion_tokens") is not None:
-                    new_body["max_tokens"] = new_body["max_completion_tokens"]
-                else:
-                    new_body["max_tokens"] = 4096
-        return path, new_body
-
-    if request_protocol == OPENAI_PROTOCOL and supplier_protocol == OPENAI_RESPONSES_PROTOCOL:
-        if path == "/v1/chat/completions":
-            openai_body = _normalize_openai_tooling_fields(body)
-            responses_body = chat_completions_request_to_responses(openai_body)
-            responses_body["model"] = target_model
-            return "/v1/responses", responses_body
-        if path == "/v1/completions":
-            prompt = body.get("prompt")
-            if prompt is None:
-                raise ServiceError(message="OpenAI request missing 'prompt'", code="invalid_request")
-            responses_body: dict[str, Any] = {"model": target_model, "input": prompt}
-            for key in (
-                "temperature",
-                "top_p",
-                "presence_penalty",
-                "frequency_penalty",
-                "seed",
-                "n",
-                "stop",
-                "stream",
-                "stream_options",
-                "user",
-                "metadata",
-            ):
-                if key in body:
-                    responses_body[key] = body[key]
-            max_output_tokens = body.get("max_tokens")
-            if max_output_tokens is not None:
-                responses_body["max_output_tokens"] = max_output_tokens
-            return "/v1/responses", responses_body
-        raise ServiceError(
-            message=f"Unsupported OpenAI endpoint for conversion: {path}",
-            code="unsupported_protocol_conversion",
+        return _convert_request_identity(
+            request_protocol=request_protocol, path=path, body=body, target_model=target_model
         )
 
-    if request_protocol == OPENAI_RESPONSES_PROTOCOL and supplier_protocol == OPENAI_PROTOCOL:
-        if path != "/v1/responses":
-            raise ServiceError(
-                message=f"Unsupported OpenAI Responses endpoint for conversion: {path}",
-                code="unsupported_protocol_conversion",
-            )
-        openai_body = responses_request_to_chat_completions(body)
-        openai_body["model"] = target_model
-        openai_body = _normalize_openai_tooling_fields(openai_body)
-        return "/v1/chat/completions", openai_body
-
-    if request_protocol == OPENAI_PROTOCOL and supplier_protocol == ANTHROPIC_PROTOCOL:
-        if path != "/v1/chat/completions":
-            raise ServiceError(
-                message=f"Unsupported OpenAI endpoint for conversion: {path}",
-                code="unsupported_protocol_conversion",
-            )
-        openai_body = _normalize_openai_tooling_fields(body)
-        messages = openai_body.get("messages")
-        if not isinstance(messages, list):
-            raise ServiceError(message="OpenAI request missing 'messages'", code="invalid_request")
-
-        has_system = any(isinstance(m, dict) and m.get("role") == "system" for m in messages)
-        for m in messages:
-            if isinstance(m, dict) and m.get("role") == "developer":
-                m["role"] = "user" if has_system else "system"
-
-        optional_params = {k: v for k, v in openai_body.items() if k not in ("model", "messages")}
-        if "max_tokens" not in optional_params and "max_completion_tokens" in optional_params:
-            optional_params["max_tokens"] = optional_params["max_completion_tokens"]
-        if "max_tokens" not in optional_params:
-            optional_params["max_tokens"] = 4096
-
-        anthropic_body = AnthropicConfig().transform_request(
-            model=target_model,
-            messages=messages,
-            optional_params=optional_params,
-            litellm_params={},
-            headers={},
-        )
-        if isinstance(anthropic_body, dict):
-            anthropic_body = _ensure_anthropic_tooling_fields(
-                source_openai_body=openai_body, target_anthropic_body=anthropic_body
-            )
-            anthropic_body = _ensure_anthropic_tool_calls(
-                source_openai_body=openai_body, target_anthropic_body=anthropic_body
-            )
-            user_id = openai_body.get("user")
-            if isinstance(user_id, str) and user_id:
-                metadata = anthropic_body.get("metadata")
-                if not isinstance(metadata, dict):
-                    metadata = {}
-                if "user_id" not in metadata:
-                    metadata["user_id"] = user_id
-                anthropic_body["metadata"] = metadata
-        return "/v1/messages", anthropic_body
-
-    if request_protocol == ANTHROPIC_PROTOCOL and supplier_protocol == OPENAI_PROTOCOL:
-        if path != "/v1/messages":
-            raise ServiceError(
-                message=f"Unsupported Anthropic endpoint for conversion: {path}",
-                code="unsupported_protocol_conversion",
-            )
-        anthropic_body = copy.deepcopy(body)
-        anthropic_body["model"] = target_model
-        if _HAS_EXPERIMENTAL_PASSTHROUGH:
-            openai_body = AnthropicExperimentalPassThroughConfig().translate_anthropic_to_openai(  # type: ignore[union-attr]
-                anthropic_message_request=anthropic_body  # type: ignore[arg-type]
-            )
-        else:
-            openai_body = _translate_anthropic_to_openai_request(
-                anthropic_body=anthropic_body, target_model=target_model
-            )
-        if isinstance(openai_body, dict):
-            openai_body = _ensure_openai_tooling_fields(
-                source_anthropic_body=anthropic_body, target_openai_body=openai_body
-            )
-        return "/v1/chat/completions", openai_body
-
-    if request_protocol == OPENAI_RESPONSES_PROTOCOL and supplier_protocol == ANTHROPIC_PROTOCOL:
-        if path != "/v1/responses":
-            raise ServiceError(
-                message=f"Unsupported OpenAI Responses endpoint for conversion: {path}",
-                code="unsupported_protocol_conversion",
-            )
-        openai_body = responses_request_to_chat_completions(body)
-        openai_body = _normalize_openai_tooling_fields(openai_body)
-        openai_body["model"] = target_model
-        messages = openai_body.get("messages")
-        if not isinstance(messages, list):
-            raise ServiceError(message="OpenAI request missing 'messages'", code="invalid_request")
-        
-        has_system = any(isinstance(m, dict) and m.get("role") == "system" for m in messages)
-        for m in messages:
-            if isinstance(m, dict) and m.get("role") == "developer":
-                m["role"] = "user" if has_system else "system"
-                
-        optional_params = {k: v for k, v in openai_body.items() if k not in ("model", "messages")}
-        if "max_tokens" not in optional_params and "max_completion_tokens" in optional_params:
-            optional_params["max_tokens"] = optional_params["max_completion_tokens"]
-        if "max_tokens" not in optional_params:
-            optional_params["max_tokens"] = 4096
-        anthropic_body = AnthropicConfig().transform_request(
-            model=target_model,
-            messages=messages,
-            optional_params=optional_params,
-            litellm_params={},
-            headers={},
-        )
-        if isinstance(anthropic_body, dict):
-            anthropic_body = _ensure_anthropic_tooling_fields(
-                source_openai_body=openai_body, target_anthropic_body=anthropic_body
-            )
-            anthropic_body = _ensure_anthropic_tool_calls(
-                source_openai_body=openai_body, target_anthropic_body=anthropic_body
-            )
-            user_id = openai_body.get("user")
-            if isinstance(user_id, str) and user_id:
-                metadata = anthropic_body.get("metadata")
-                if not isinstance(metadata, dict):
-                    metadata = {}
-                if "user_id" not in metadata:
-                    metadata["user_id"] = user_id
-                anthropic_body["metadata"] = metadata
-        return "/v1/messages", anthropic_body
+    converters = {
+        (OPENAI_PROTOCOL, OPENAI_RESPONSES_PROTOCOL): _convert_request_openai_to_openai_responses,
+        (OPENAI_RESPONSES_PROTOCOL, OPENAI_PROTOCOL): _convert_request_openai_responses_to_openai,
+        (OPENAI_PROTOCOL, ANTHROPIC_PROTOCOL): _convert_request_openai_to_anthropic,
+        (ANTHROPIC_PROTOCOL, OPENAI_PROTOCOL): _convert_request_anthropic_to_openai,
+        (OPENAI_RESPONSES_PROTOCOL, ANTHROPIC_PROTOCOL): _convert_request_openai_responses_to_anthropic,
+    }
+    converter = converters.get((request_protocol, supplier_protocol))
+    if converter is not None:
+        return converter(path=path, body=body, target_model=target_model)
 
     raise ServiceError(
         message=f"Unsupported protocol conversion: {request_protocol} -> {supplier_protocol}",
@@ -747,39 +1070,15 @@ def convert_response_for_user(
     if not isinstance(body, dict):
         return body
 
-    if request_protocol == OPENAI_PROTOCOL and supplier_protocol == OPENAI_RESPONSES_PROTOCOL:
-        return responses_response_to_chat_completion(body)
-
-    if request_protocol == OPENAI_RESPONSES_PROTOCOL and supplier_protocol == OPENAI_PROTOCOL:
-        return chat_completion_to_responses_response(body)
-
-    if request_protocol == ANTHROPIC_PROTOCOL and supplier_protocol == OPENAI_PROTOCOL:
-        if _HAS_EXPERIMENTAL_PASSTHROUGH:
-            model_response = ModelResponse(**body)
-            translated = AnthropicExperimentalPassThroughConfig().translate_openai_response_to_anthropic(  # type: ignore[union-attr]
-                response=model_response
-            )
-            return translated.model_dump(exclude_none=True)
-        return _translate_openai_response_to_anthropic(body, target_model)
-
-    if request_protocol == OPENAI_PROTOCOL and supplier_protocol == ANTHROPIC_PROTOCOL:
-        dummy_logger = type("DummyLogger", (), {"post_call": lambda *args, **kwargs: None})()
-        response = httpx.Response(200, json=body, headers={})
-        model = body.get("model") or target_model
-        model_response = AnthropicConfig().transform_response(
-            model=model,
-            raw_response=response,
-            model_response=ModelResponse(),
-            logging_obj=dummy_logger,
-            request_data={},
-            messages=[],
-            optional_params={},
-            litellm_params={},
-            encoding=None,
-            api_key="",
-            json_mode=None,
-        )
-        return model_response.model_dump(exclude_none=True)
+    converters = {
+        (OPENAI_PROTOCOL, OPENAI_RESPONSES_PROTOCOL): _convert_response_openai_responses_to_openai,
+        (OPENAI_RESPONSES_PROTOCOL, OPENAI_PROTOCOL): _convert_response_openai_to_openai_responses,
+        (ANTHROPIC_PROTOCOL, OPENAI_PROTOCOL): _convert_response_openai_to_anthropic,
+        (OPENAI_PROTOCOL, ANTHROPIC_PROTOCOL): _convert_response_anthropic_to_openai,
+    }
+    converter = converters.get((request_protocol, supplier_protocol))
+    if converter is not None:
+        return converter(body, target_model)
 
     raise ServiceError(
         message=f"Unsupported protocol conversion: {supplier_protocol} -> {request_protocol}",
@@ -807,272 +1106,16 @@ async def convert_stream_for_user(
             yield chunk
         return
 
-    # openai -> openai responses
-    if request_protocol == OPENAI_PROTOCOL and supplier_protocol == OPENAI_RESPONSES_PROTOCOL:
-        async for chunk in responses_sse_to_chat_completions_sse(upstream=upstream, model=model):
+    converters = {
+        (OPENAI_PROTOCOL, OPENAI_RESPONSES_PROTOCOL): _convert_stream_openai_responses_to_openai,
+        (OPENAI_RESPONSES_PROTOCOL, OPENAI_PROTOCOL): _convert_stream_openai_to_openai_responses,
+        (OPENAI_PROTOCOL, ANTHROPIC_PROTOCOL): _convert_stream_anthropic_to_openai,
+        (ANTHROPIC_PROTOCOL, OPENAI_PROTOCOL): _convert_stream_openai_to_anthropic,
+    }
+    converter = converters.get((request_protocol, supplier_protocol))
+    if converter is not None:
+        async for chunk in converter(upstream=upstream, model=model):
             yield chunk
-        return
-
-    # openai responses -> openai
-    if request_protocol == OPENAI_RESPONSES_PROTOCOL and supplier_protocol == OPENAI_PROTOCOL:
-        async for chunk in chat_completions_sse_to_responses_sse(upstream=upstream, model=model):
-            yield chunk
-        return
-
-    # anthropic -> openai
-    if request_protocol == ANTHROPIC_PROTOCOL and supplier_protocol == OPENAI_PROTOCOL:
-        decoder = SSEDecoder()
-
-        sent_message_start = False
-        sent_content_block_start = False
-        sent_content_block_finish = False
-        sent_message_stop = False
-        holding: Optional[dict[str, Any]] = None
-
-        async for chunk in upstream:
-            for payload in decoder.feed(chunk):
-                if not payload:
-                    continue
-                if payload.strip() == "[DONE]":
-                    continue
-
-                if not sent_message_start:
-                    sent_message_start = True
-                    yield _encode_sse_json(
-                        {
-                            "type": "message_start",
-                            "message": {
-                                "id": f"msg_{uuid.uuid4().hex}",
-                                "type": "message",
-                                "role": "assistant",
-                                "content": [],
-                                "model": model,
-                                "stop_reason": None,
-                                "stop_sequence": None,
-                                "usage": {"input_tokens": 0, "output_tokens": 0},
-                            },
-                        }
-                    )
-                if not sent_content_block_start:
-                    sent_content_block_start = True
-                    yield _encode_sse_json(
-                        {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}
-                    )
-
-                try:
-                    data = json.loads(payload)
-                except Exception:
-                    continue
-
-                try:
-                    openai_chunk = ChatCompletionChunk(**data)
-                except Exception:
-                    continue
-
-                if _HAS_EXPERIMENTAL_PASSTHROUGH:
-                    cfg = AnthropicExperimentalPassThroughConfig()  # type: ignore[call-arg]
-                    processed = cfg.translate_streaming_openai_response_to_anthropic(response=openai_chunk)  # type: ignore[union-attr]
-                else:
-                    # Minimal fallback: translate content delta + finish into Anthropic stream events
-                    choice = openai_chunk.choices[0] if openai_chunk.choices else None
-                    if choice is None:
-                        continue
-                    if choice.delta and getattr(choice.delta, "content", None):
-                        processed = {
-                            "type": "content_block_delta",
-                            "index": choice.index,
-                            "delta": {"type": "text_delta", "text": choice.delta.content},
-                        }
-                    elif choice.finish_reason is not None:
-                        processed = {
-                            "type": "message_delta",
-                            "delta": {"stop_reason": _map_openai_finish_reason_to_anthropic(choice.finish_reason)},
-                            "usage": {"output_tokens": 0},
-                        }
-                    else:
-                        continue
-
-                if processed.get("type") == "message_delta" and sent_content_block_finish is False:
-                    holding = processed
-                    sent_content_block_finish = True
-                    yield _encode_sse_json({"type": "content_block_stop", "index": 0})
-                    continue
-
-                if holding is not None:
-                    yield _encode_sse_json(holding)
-                    holding = processed
-                    continue
-
-                yield _encode_sse_json(processed)
-
-        if holding is not None:
-            yield _encode_sse_json(holding)
-            holding = None
-
-        if sent_message_stop is False:
-            sent_message_stop = True
-            yield _encode_sse_json({"type": "message_stop"})
-        return
-
-    # openai -> anthropic
-    if request_protocol == OPENAI_PROTOCOL and supplier_protocol == ANTHROPIC_PROTOCOL:
-        decoder = SSEDecoder()
-        response_id: Optional[str] = None
-        sent_role = False
-        current_tool_id: Optional[str] = None
-        current_tool_name: Optional[str] = None
-        current_tool_index = 0
-        done = False
-
-        async for chunk in upstream:
-            for payload in decoder.feed(chunk):
-                if not payload:
-                    continue
-                if payload.strip() == "[DONE]":
-                    continue
-
-                try:
-                    data = json.loads(payload)
-                except Exception:
-                    continue
-
-                event_type = data.get("type")
-                if event_type == "message_start":
-                    message = data.get("message", {})
-                    if isinstance(message, dict):
-                        response_id = message.get("id") or response_id
-                    continue
-
-                if event_type == "content_block_start":
-                    content_block = data.get("content_block", {})
-                    if isinstance(content_block, dict):
-                        block_type = content_block.get("type")
-                        if block_type == "text":
-                            text = content_block.get("text") or ""
-                            if text:
-                                delta: dict[str, Any] = {"content": text}
-                                if not sent_role:
-                                    delta["role"] = "assistant"
-                                    sent_role = True
-                                yield _encode_sse_json(
-                                    {
-                                        "id": response_id or f"chatcmpl-{uuid.uuid4().hex}",
-                                        "object": "chat.completion.chunk",
-                                        "created": int(time.time()),
-                                        "model": model,
-                                        "choices": [{"index": 0, "delta": delta, "finish_reason": None}],
-                                    }
-                                )
-                        elif block_type == "tool_use":
-                            current_tool_id = content_block.get("id")
-                            current_tool_name = content_block.get("name")
-                            if isinstance(data.get("index"), int):
-                                current_tool_index = data["index"]
-                            tool_args = content_block.get("input")
-                            if isinstance(tool_args, dict):
-                                arguments = json.dumps(tool_args, ensure_ascii=False)
-                            elif isinstance(tool_args, str):
-                                arguments = tool_args
-                            else:
-                                arguments = "{}"
-                            delta = {
-                                "tool_calls": [
-                                    {
-                                        "index": current_tool_index,
-                                        "id": current_tool_id,
-                                        "type": "function",
-                                        "function": {"name": current_tool_name, "arguments": arguments},
-                                    }
-                                ]
-                            }
-                            if not sent_role:
-                                delta["role"] = "assistant"
-                                sent_role = True
-                            yield _encode_sse_json(
-                                {
-                                    "id": response_id or f"chatcmpl-{uuid.uuid4().hex}",
-                                    "object": "chat.completion.chunk",
-                                    "created": int(time.time()),
-                                    "model": model,
-                                    "choices": [{"index": 0, "delta": delta, "finish_reason": None}],
-                                }
-                            )
-                    continue
-
-                if event_type == "content_block_delta":
-                    delta_obj = data.get("delta")
-                    if isinstance(delta_obj, dict):
-                        delta_type = delta_obj.get("type")
-                        if delta_type == "text_delta":
-                            text = delta_obj.get("text") or ""
-                            if text:
-                                delta: dict[str, Any] = {"content": text}
-                                if not sent_role:
-                                    delta["role"] = "assistant"
-                                    sent_role = True
-                                yield _encode_sse_json(
-                                    {
-                                        "id": response_id or f"chatcmpl-{uuid.uuid4().hex}",
-                                        "object": "chat.completion.chunk",
-                                        "created": int(time.time()),
-                                        "model": model,
-                                        "choices": [{"index": 0, "delta": delta, "finish_reason": None}],
-                                    }
-                                )
-                        elif delta_type == "input_json_delta":
-                            partial_json = delta_obj.get("partial_json") or ""
-                            if partial_json:
-                                delta: dict[str, Any] = {
-                                    "tool_calls": [
-                                        {
-                                            "index": current_tool_index,
-                                            "id": current_tool_id,
-                                            "type": "function",
-                                            "function": {"name": current_tool_name, "arguments": partial_json},
-                                        }
-                                    ]
-                                }
-                                if not sent_role:
-                                    delta["role"] = "assistant"
-                                    sent_role = True
-                                yield _encode_sse_json(
-                                    {
-                                        "id": response_id or f"chatcmpl-{uuid.uuid4().hex}",
-                                        "object": "chat.completion.chunk",
-                                        "created": int(time.time()),
-                                        "model": model,
-                                        "choices": [{"index": 0, "delta": delta, "finish_reason": None}],
-                                    }
-                                )
-                    continue
-
-                if event_type == "message_delta":
-                    delta_dict = data.get("delta")
-                    stop_reason = None
-                    if isinstance(delta_dict, dict):
-                        stop_reason = delta_dict.get("stop_reason")
-                    finish_reason = _map_anthropic_finish_reason_to_openai(stop_reason)
-                    yield _encode_sse_json(
-                        {
-                            "id": response_id or f"chatcmpl-{uuid.uuid4().hex}",
-                            "object": "chat.completion.chunk",
-                            "created": int(time.time()),
-                            "model": model,
-                            "choices": [{"index": 0, "delta": {}, "finish_reason": finish_reason}],
-                        }
-                    )
-                    yield _encode_sse_data("[DONE]")
-                    done = True
-                    continue
-
-                if event_type == "message_stop":
-                    if not done:
-                        yield _encode_sse_data("[DONE]")
-                        done = True
-                    continue
-
-        if not done:
-            yield _encode_sse_data("[DONE]")
         return
 
     raise ServiceError(
