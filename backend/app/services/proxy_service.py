@@ -844,6 +844,7 @@ class ProxyService:
 
         # Wrap generator to handle logging
         async def wrapped_generator():
+            nonlocal input_tokens
             usage_acc = StreamUsageAccumulator(
                 protocol=protocol,
                 model=requested_model,
