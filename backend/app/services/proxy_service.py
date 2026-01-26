@@ -273,8 +273,8 @@ class ProxyService:
     
     async def process_request(
         self,
-        api_key_id: int,
-        api_key_name: str,
+        api_key_id: Optional[int],
+        api_key_name: Optional[str],
         request_protocol: str,
         path: str,
         method: str,
@@ -597,8 +597,8 @@ class ProxyService:
 
     async def process_request_stream(
         self,
-        api_key_id: int,
-        api_key_name: str,
+        api_key_id: Optional[int],
+        api_key_name: Optional[str],
         request_protocol: str,
         path: str,
         method: str,

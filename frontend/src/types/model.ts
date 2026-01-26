@@ -199,3 +199,15 @@ export interface ModelMatchProvider {
   model_output_price?: number | null;
   estimated_cost?: number | null;
 }
+
+export interface ModelTestRequest {
+  protocol: ProtocolType;
+  stream: boolean;
+}
+
+export interface ModelTestResponse {
+  content: string;
+  response_status: number;
+  total_time_ms?: number | null;
+  first_byte_delay_ms?: number | null;
+}
