@@ -477,7 +477,9 @@ async def chat_completions_sse_to_responses_sse(
             ],
         },
     }
-    yield f"data: {json.dumps(created, ensure_ascii=False)}\n\n".encode("utf-8")
+    yield f"event: response.created\ndata: {json.dumps(created, ensure_ascii=False)}\n\n".encode(
+        "utf-8"
+    )
 
     text_parts: list[str] = []
     saw_done = False
@@ -515,7 +517,7 @@ async def chat_completions_sse_to_responses_sse(
                         "content_index": 0,
                         "item_id": msg_id,
                     }
-                    yield f"data: {json.dumps(evt, ensure_ascii=False)}\n\n".encode(
+                    yield f"event: response.output_text.delta\ndata: {json.dumps(evt, ensure_ascii=False)}\n\n".encode(
                         "utf-8"
                     )
 
@@ -542,7 +544,9 @@ async def chat_completions_sse_to_responses_sse(
             "usage": None,
         },
     }
-    yield f"data: {json.dumps(completed, ensure_ascii=False)}\n\n".encode("utf-8")
+    yield f"event: response.completed\ndata: {json.dumps(completed, ensure_ascii=False)}\n\n".encode(
+        "utf-8"
+    )
     yield b"data: [DONE]\n\n"
 
 
