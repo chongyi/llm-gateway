@@ -173,7 +173,7 @@ class SDKRequestConverter(IRequestConverter):
 
             # Handle max_tokens for Anthropic target
             if self._target == Protocol.ANTHROPIC:
-                body = self._ensure_max_tokens(body)
+                body = self._ensure_max_tokens_for_anthropic(body)
 
             # Use SDK conversion
             sdk_source = _protocol_to_sdk(self._source)
@@ -209,14 +209,39 @@ class SDKRequestConverter(IRequestConverter):
                 target_protocol=self._target.value,
             ) from e
 
-    def _ensure_max_tokens(self, body: Dict[str, Any]) -> Dict[str, Any]:
-        """Ensure max_tokens is set for Anthropic requests."""
-        if body.get("max_tokens") is None:
-            body = copy.deepcopy(body)
-            if body.get("max_completion_tokens") is not None:
-                body["max_tokens"] = body["max_completion_tokens"]
-            else:
+    def _ensure_max_tokens_for_anthropic(self, body: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Ensure max_tokens is set when converting to Anthropic protocol.
+
+        Different source protocols use different field names:
+        - OpenAI Chat: max_tokens or max_completion_tokens
+        - OpenAI Responses: max_output_tokens
+        - Anthropic: max_tokens
+
+        We need to ensure the appropriate field exists for the source protocol
+        so the SDK decoder can read it properly.
+        """
+        body = copy.deepcopy(body)
+
+        if self._source == Protocol.OPENAI_RESPONSES:
+            # For OpenAI Responses, ensure max_output_tokens is set
+            if body.get("max_output_tokens") is None:
+                body["max_output_tokens"] = 4096
+        elif self._source == Protocol.OPENAI:
+            # For OpenAI Chat, ensure max_tokens or max_completion_tokens is set
+            if (
+                body.get("max_tokens") is None
+                and body.get("max_completion_tokens") is None
+            ):
                 body["max_tokens"] = 4096
+        elif self._source == Protocol.ANTHROPIC:
+            # For Anthropic source, ensure max_tokens is set
+            if body.get("max_tokens") is None:
+                if body.get("max_completion_tokens") is not None:
+                    body["max_tokens"] = body["max_completion_tokens"]
+                else:
+                    body["max_tokens"] = 4096
+
         return body
 
 

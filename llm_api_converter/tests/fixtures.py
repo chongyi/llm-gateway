@@ -10,9 +10,7 @@ Sample payloads for testing protocol conversions.
 
 OPENAI_CHAT_SIMPLE_REQUEST = {
     "model": "gpt-4o",
-    "messages": [
-        {"role": "user", "content": "Hello, how are you?"}
-    ],
+    "messages": [{"role": "user", "content": "Hello, how are you?"}],
     "max_tokens": 100,
 }
 
@@ -35,7 +33,10 @@ OPENAI_CHAT_MULTIMODAL_REQUEST = {
                 {"type": "text", "text": "What's in this image?"},
                 {
                     "type": "image_url",
-                    "image_url": {"url": "https://example.com/image.jpg", "detail": "auto"},
+                    "image_url": {
+                        "url": "https://example.com/image.jpg",
+                        "detail": "auto",
+                    },
                 },
             ],
         }
@@ -45,9 +46,7 @@ OPENAI_CHAT_MULTIMODAL_REQUEST = {
 
 OPENAI_CHAT_WITH_TOOLS_REQUEST = {
     "model": "gpt-4o",
-    "messages": [
-        {"role": "user", "content": "What's the weather in Paris?"}
-    ],
+    "messages": [{"role": "user", "content": "What's the weather in Paris?"}],
     "max_tokens": 200,
     "tools": [
         {
@@ -150,6 +149,39 @@ OPENAI_CHAT_TOOL_CALL_RESPONSE = {
     },
 }
 
+# OpenAI tool call response with incorrect finish_reason (some providers return "stop" instead of "tool_calls")
+OPENAI_CHAT_TOOL_CALL_RESPONSE_WRONG_FINISH_REASON = {
+    "id": "chatcmpl-wrong123",
+    "object": "chat.completion",
+    "created": 1700000000,
+    "model": "gpt-5-nano-2025-08-07",
+    "choices": [
+        {
+            "index": 0,
+            "message": {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "call_wrong456",
+                        "type": "function",
+                        "function": {
+                            "name": "get_server_status",
+                            "arguments": '{"server": "prod-1"}',
+                        },
+                    }
+                ],
+            },
+            "finish_reason": "stop",  # Wrong! Should be "tool_calls"
+        }
+    ],
+    "usage": {
+        "prompt_tokens": 100,
+        "completion_tokens": 42,
+        "total_tokens": 142,
+    },
+}
+
 # Streaming chunks
 OPENAI_CHAT_STREAM_CHUNKS = [
     {
@@ -157,7 +189,13 @@ OPENAI_CHAT_STREAM_CHUNKS = [
         "object": "chat.completion.chunk",
         "created": 1700000000,
         "model": "gpt-4o",
-        "choices": [{"index": 0, "delta": {"role": "assistant", "content": ""}, "finish_reason": None}],
+        "choices": [
+            {
+                "index": 0,
+                "delta": {"role": "assistant", "content": ""},
+                "finish_reason": None,
+            }
+        ],
     },
     {
         "id": "chatcmpl-stream1",
@@ -171,7 +209,9 @@ OPENAI_CHAT_STREAM_CHUNKS = [
         "object": "chat.completion.chunk",
         "created": 1700000000,
         "model": "gpt-4o",
-        "choices": [{"index": 0, "delta": {"content": " there!"}, "finish_reason": None}],
+        "choices": [
+            {"index": 0, "delta": {"content": " there!"}, "finish_reason": None}
+        ],
     },
     {
         "id": "chatcmpl-stream1",
@@ -203,7 +243,11 @@ OPENAI_RESPONSES_WITH_INSTRUCTIONS_REQUEST = {
 OPENAI_RESPONSES_WITH_TOOLS_REQUEST = {
     "model": "gpt-4o",
     "input": [
-        {"type": "message", "role": "user", "content": [{"type": "text", "text": "What's the weather in Paris?"}]}
+        {
+            "type": "message",
+            "role": "user",
+            "content": [{"type": "text", "text": "What's the weather in Paris?"}],
+        }
     ],
     "max_output_tokens": 200,
     "tools": [
@@ -232,7 +276,12 @@ OPENAI_RESPONSES_SIMPLE_RESPONSE = {
         {
             "type": "message",
             "role": "assistant",
-            "content": [{"type": "output_text", "text": "Hello! I'm doing great, thank you for asking."}],
+            "content": [
+                {
+                    "type": "output_text",
+                    "text": "Hello! I'm doing great, thank you for asking.",
+                }
+            ],
         }
     ],
     "status": "completed",
@@ -272,9 +321,7 @@ OPENAI_RESPONSES_TOOL_CALL_RESPONSE = {
 
 ANTHROPIC_SIMPLE_REQUEST = {
     "model": "claude-3-5-sonnet-20241022",
-    "messages": [
-        {"role": "user", "content": "Hello, how are you?"}
-    ],
+    "messages": [{"role": "user", "content": "Hello, how are you?"}],
     "max_tokens": 100,
 }
 
@@ -310,9 +357,7 @@ ANTHROPIC_MULTIMODAL_REQUEST = {
 
 ANTHROPIC_WITH_TOOLS_REQUEST = {
     "model": "claude-3-5-sonnet-20241022",
-    "messages": [
-        {"role": "user", "content": "What's the weather in Paris?"}
-    ],
+    "messages": [{"role": "user", "content": "What's the weather in Paris?"}],
     "max_tokens": 200,
     "tools": [
         {
@@ -478,12 +523,18 @@ OPENAI_CHAT_MULTI_TOOL_CALLS_RESPONSE = {
                     {
                         "id": "call_1",
                         "type": "function",
-                        "function": {"name": "get_weather", "arguments": '{"location": "Paris"}'},
+                        "function": {
+                            "name": "get_weather",
+                            "arguments": '{"location": "Paris"}',
+                        },
                     },
                     {
                         "id": "call_2",
                         "type": "function",
-                        "function": {"name": "get_weather", "arguments": '{"location": "London"}'},
+                        "function": {
+                            "name": "get_weather",
+                            "arguments": '{"location": "London"}',
+                        },
                     },
                 ],
             },
@@ -499,11 +550,40 @@ ANTHROPIC_MULTI_TOOL_USE_RESPONSE = {
     "role": "assistant",
     "model": "claude-3-5-sonnet-20241022",
     "content": [
-        {"type": "tool_use", "id": "toolu_1", "name": "get_weather", "input": {"location": "Paris"}},
-        {"type": "tool_use", "id": "toolu_2", "name": "get_weather", "input": {"location": "London"}},
+        {
+            "type": "tool_use",
+            "id": "toolu_1",
+            "name": "get_weather",
+            "input": {"location": "Paris"},
+        },
+        {
+            "type": "tool_use",
+            "id": "toolu_2",
+            "name": "get_weather",
+            "input": {"location": "London"},
+        },
     ],
     "stop_reason": "tool_use",
     "usage": {"input_tokens": 100, "output_tokens": 50},
+}
+
+# OpenAI Responses API with input_text and input_image content types
+OPENAI_RESPONSES_MULTIMODAL_REQUEST = {
+    "model": "gpt-4o",
+    "input": [
+        {
+            "type": "message",
+            "role": "user",
+            "content": [
+                {"type": "input_text", "text": "What is in this image?"},
+                {
+                    "type": "input_image",
+                    "image_url": "https://example.com/image.jpg",
+                },
+            ],
+        }
+    ],
+    "max_output_tokens": 500,
 }
 
 OPENAI_CHAT_WITH_BASE64_IMAGE_REQUEST = {

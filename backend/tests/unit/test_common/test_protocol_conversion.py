@@ -350,6 +350,46 @@ def test_convert_response_anthropic_to_openai():
     assert converted["usage"]["completion_tokens"] == 2
 
 
+def test_convert_request_openai_responses_to_anthropic_with_max_output_tokens():
+    """Test that max_output_tokens from OpenAI Responses is mapped to max_tokens for Anthropic."""
+    path, out_body = convert_request_for_supplier(
+        request_protocol="openai_responses",
+        supplier_protocol="anthropic",
+        path="/v1/responses",
+        body={
+            "model": "any",
+            "input": "Hello, how are you?",
+            "max_output_tokens": 1024,
+        },
+        target_model="claude-3-5-sonnet",
+    )
+
+    assert path == "/v1/messages"
+    assert out_body["model"] == "claude-3-5-sonnet"
+    assert out_body["max_tokens"] == 1024
+    assert isinstance(out_body.get("messages"), list)
+
+
+def test_convert_request_openai_responses_to_anthropic_without_max_output_tokens():
+    """Test that default max_tokens is injected when max_output_tokens is not provided."""
+    path, out_body = convert_request_for_supplier(
+        request_protocol="openai_responses",
+        supplier_protocol="anthropic",
+        path="/v1/responses",
+        body={
+            "model": "any",
+            "input": "Hello, how are you?",
+        },
+        target_model="claude-3-5-sonnet",
+    )
+
+    assert path == "/v1/messages"
+    assert out_body["model"] == "claude-3-5-sonnet"
+    # Default max_tokens should be 4096
+    assert out_body["max_tokens"] == 4096
+    assert isinstance(out_body.get("messages"), list)
+
+
 def test_convert_response_openai_responses_to_openai():
     converted = convert_response_for_user(
         request_protocol="openai",

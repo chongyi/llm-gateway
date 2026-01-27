@@ -10,25 +10,25 @@ import time
 from typing import Any, Dict, List, Optional, Union
 
 from ..ir import (
+    ImageSourceType,
+    IRAudioBlock,
+    IRContentBlock,
+    IRGenerationConfig,
+    IRImageBlock,
+    IRMessage,
     IRRequest,
     IRResponse,
-    IRMessage,
-    IRContentBlock,
-    IRTextBlock,
-    IRImageBlock,
-    IRAudioBlock,
-    IRToolUseBlock,
-    IRToolResultBlock,
-    IRToolDeclaration,
-    IRToolChoice,
-    IRUsage,
-    IRGenerationConfig,
     IRResponseFormat,
     IRStreamEvent,
+    IRTextBlock,
+    IRToolChoice,
+    IRToolDeclaration,
+    IRToolResultBlock,
+    IRToolUseBlock,
+    IRUsage,
     Role,
     StopReason,
     StreamEventType,
-    ImageSourceType,
     ToolChoiceType,
 )
 from .exceptions import ConversionError, ValidationError
@@ -156,10 +156,31 @@ class OpenAIResponsesDecoder:
         """Decode a single content block."""
         block_type = block.get("type", "text")
 
-        if block_type in ("text", "output_text"):
+        # Handle text content blocks (text, output_text, input_text)
+        if block_type in ("text", "output_text", "input_text"):
             return IRTextBlock(text=block.get("text", ""))
 
+        # Handle image content blocks (image_url, input_image)
         elif block_type == "image_url":
+            url = block.get("image_url", "")
+            if isinstance(url, dict):
+                url = url.get("url", "")
+
+            if url.startswith("data:"):
+                media_type, base64_data = self._parse_data_url(url)
+                return IRImageBlock(
+                    source_type=ImageSourceType.BASE64,
+                    base64_data=base64_data,
+                    media_type=media_type,
+                )
+            else:
+                return IRImageBlock(
+                    source_type=ImageSourceType.URL,
+                    url=url,
+                )
+
+        elif block_type == "input_image":
+            # input_image can have image_url (string URL) or detail
             url = block.get("image_url", "")
             if isinstance(url, dict):
                 url = url.get("url", "")
@@ -401,11 +422,15 @@ class OpenAIResponsesDecoder:
             ir_events.append(
                 IRStreamEvent(
                     type=StreamEventType.MESSAGE_DELTA,
-                    stop_reason=self._map_status(response_data.get("status", "completed")),
+                    stop_reason=self._map_status(
+                        response_data.get("status", "completed")
+                    ),
                     usage=IRUsage(
                         input_tokens=usage.get("input_tokens", 0),
                         output_tokens=usage.get("output_tokens", 0),
-                    ) if usage else None,
+                    )
+                    if usage
+                    else None,
                 )
             )
             ir_events.append(IRStreamEvent(type=StreamEventType.DONE))
@@ -530,7 +555,9 @@ class OpenAIResponsesEncoder:
 
         # Response format
         if ir.response_format and ir.response_format.type != "text":
-            payload["text"] = {"format": self._encode_response_format(ir.response_format)}
+            payload["text"] = {
+                "format": self._encode_response_format(ir.response_format)
+            }
 
         # User
         if ir.user:
@@ -564,11 +591,15 @@ class OpenAIResponsesEncoder:
             items = []
             for block in msg.content:
                 if isinstance(block, IRToolResultBlock):
-                    items.append({
-                        "type": "function_call_output",
-                        "call_id": block.tool_use_id,
-                        "output": block.content if isinstance(block.content, str) else str(block.content),
-                    })
+                    items.append(
+                        {
+                            "type": "function_call_output",
+                            "call_id": block.tool_use_id,
+                            "output": block.content
+                            if isinstance(block.content, str)
+                            else str(block.content),
+                        }
+                    )
             return items if items else None
 
         # Handle regular messages
@@ -576,37 +607,48 @@ class OpenAIResponsesEncoder:
         content = []
         function_calls = []
 
+        # Determine text type based on role
+        # User messages use input_text/input_image, assistant messages use output_text
+        is_user_message = msg.role == Role.USER
+        text_type = "input_text" if is_user_message else "output_text"
+
         for block in msg.content:
             if isinstance(block, IRTextBlock):
-                content.append({"type": "text", "text": block.text})
+                content.append({"type": text_type, "text": block.text})
             elif isinstance(block, IRImageBlock):
-                content.append(self._encode_image_block(block))
+                content.append(self._encode_image_block(block, is_user_message))
             elif isinstance(block, IRAudioBlock):
                 content.append(self._encode_audio_block(block))
             elif isinstance(block, IRToolUseBlock):
-                function_calls.append({
-                    "type": "function_call",
-                    "call_id": block.id,
-                    "name": block.name,
-                    "arguments": json.dumps(block.input) if block.input else "{}",
-                })
+                function_calls.append(
+                    {
+                        "type": "function_call",
+                        "call_id": block.id,
+                        "name": block.name,
+                        "arguments": json.dumps(block.input) if block.input else "{}",
+                    }
+                )
 
         items = []
 
         # Add message if has content
         if content:
-            items.append({
-                "type": "message",
-                "role": role,
-                "content": content,
-            })
+            items.append(
+                {
+                    "type": "message",
+                    "role": role,
+                    "content": content,
+                }
+            )
 
         # Add function calls as separate items
         items.extend(function_calls)
 
         return items if items else None
 
-    def _encode_image_block(self, block: IRImageBlock) -> Dict[str, Any]:
+    def _encode_image_block(
+        self, block: IRImageBlock, is_user_message: bool = True
+    ) -> Dict[str, Any]:
         """Encode an image block."""
         if block.source_type == ImageSourceType.BASE64:
             media_type = block.media_type or "image/png"
@@ -614,7 +656,11 @@ class OpenAIResponsesEncoder:
         else:
             url = block.url or ""
 
-        return {"type": "image_url", "image_url": url}
+        # Use input_image for user messages, image_url for others
+        if is_user_message:
+            return {"type": "input_image", "image_url": url}
+        else:
+            return {"type": "image_url", "image_url": url}
 
     def _encode_audio_block(self, block: IRAudioBlock) -> Dict[str, Any]:
         """Encode an audio block."""
@@ -683,30 +729,36 @@ class OpenAIResponsesEncoder:
             elif isinstance(block, IRToolUseBlock):
                 # Add any accumulated text as a message first
                 if text_parts:
-                    output.append({
-                        "type": "message",
-                        "role": "assistant",
-                        "content": text_parts,
-                    })
+                    output.append(
+                        {
+                            "type": "message",
+                            "role": "assistant",
+                            "content": text_parts,
+                        }
+                    )
                     text_parts = []
 
                 # Add function call
-                output.append({
-                    "type": "function_call",
-                    "id": block.id,
-                    "call_id": block.id,
-                    "name": block.name,
-                    "arguments": json.dumps(block.input) if block.input else "{}",
-                    "status": "completed",
-                })
+                output.append(
+                    {
+                        "type": "function_call",
+                        "id": block.id,
+                        "call_id": block.id,
+                        "name": block.name,
+                        "arguments": json.dumps(block.input) if block.input else "{}",
+                        "status": "completed",
+                    }
+                )
 
         # Add remaining text
         if text_parts:
-            output.append({
-                "type": "message",
-                "role": "assistant",
-                "content": text_parts,
-            })
+            output.append(
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": text_parts,
+                }
+            )
 
         # Build response
         response: Dict[str, Any] = {
@@ -723,9 +775,8 @@ class OpenAIResponsesEncoder:
             response["usage"] = {
                 "input_tokens": ir.usage.input_tokens,
                 "output_tokens": ir.usage.output_tokens,
-                "total_tokens": ir.usage.total_tokens or (
-                    ir.usage.input_tokens + ir.usage.output_tokens
-                ),
+                "total_tokens": ir.usage.total_tokens
+                or (ir.usage.input_tokens + ir.usage.output_tokens),
             }
 
         return response
@@ -748,7 +799,9 @@ class OpenAIResponsesEncoder:
                         "response": {
                             "id": response.id if response else "",
                             "object": "response",
-                            "created_at": response.created if response else int(time.time()),
+                            "created_at": response.created
+                            if response
+                            else int(time.time()),
                             "model": response.model if response else "",
                             "status": "in_progress",
                             "output": [],
@@ -839,9 +892,15 @@ class OpenAIResponsesEncoder:
                         "response": {
                             "status": "completed",
                             "usage": {
-                                "input_tokens": ir_event.usage.input_tokens if ir_event.usage else 0,
-                                "output_tokens": ir_event.usage.output_tokens if ir_event.usage else 0,
-                            } if ir_event.usage else {},
+                                "input_tokens": ir_event.usage.input_tokens
+                                if ir_event.usage
+                                else 0,
+                                "output_tokens": ir_event.usage.output_tokens
+                                if ir_event.usage
+                                else 0,
+                            }
+                            if ir_event.usage
+                            else {},
                         }
                     },
                     output_format,

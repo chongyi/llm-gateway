@@ -10,29 +10,29 @@ import time
 from typing import Any, Dict, List, Optional, Union
 
 from ..ir import (
+    ImageSourceType,
+    IRContentBlock,
+    IRDocumentBlock,
+    IRGenerationConfig,
+    IRImageBlock,
+    IRMessage,
     IRRequest,
     IRResponse,
-    IRMessage,
-    IRContentBlock,
-    IRTextBlock,
-    IRImageBlock,
-    IRDocumentBlock,
-    IRToolUseBlock,
-    IRToolResultBlock,
-    IRThinkingBlock,
-    IRToolDeclaration,
-    IRToolChoice,
-    IRUsage,
-    IRGenerationConfig,
-    IRThinkingConfig,
     IRStreamEvent,
+    IRTextBlock,
+    IRThinkingBlock,
+    IRThinkingConfig,
+    IRToolChoice,
+    IRToolDeclaration,
+    IRToolResultBlock,
+    IRToolUseBlock,
+    IRUsage,
     Role,
     StopReason,
     StreamEventType,
-    ImageSourceType,
     ToolChoiceType,
 )
-from .exceptions import ConversionError, ValidationError, CapabilityNotSupportedError
+from .exceptions import CapabilityNotSupportedError, ConversionError, ValidationError
 
 
 class AnthropicMessagesDecoder:
@@ -100,8 +100,14 @@ class AnthropicMessagesDecoder:
             # Check if message contains only tool_result blocks
             # If so, convert each to a separate TOOL role message
             if role == Role.USER:
-                tool_results = [b for b in ir_message.content if isinstance(b, IRToolResultBlock)]
-                other_content = [b for b in ir_message.content if not isinstance(b, IRToolResultBlock)]
+                tool_results = [
+                    b for b in ir_message.content if isinstance(b, IRToolResultBlock)
+                ]
+                other_content = [
+                    b
+                    for b in ir_message.content
+                    if not isinstance(b, IRToolResultBlock)
+                ]
 
                 if tool_results:
                     # Add each tool result as separate TOOL message
@@ -183,7 +189,9 @@ class AnthropicMessagesDecoder:
             content = block.get("content", "")
             return IRToolResultBlock(
                 tool_use_id=block.get("tool_use_id", ""),
-                content=content if isinstance(content, str) else self._decode_tool_result_content(content),
+                content=content
+                if isinstance(content, str)
+                else self._decode_tool_result_content(content),
                 is_error=block.get("is_error", False),
             )
 
@@ -434,7 +442,9 @@ class AnthropicMessagesDecoder:
                     stop_sequence=delta.get("stop_sequence"),
                     usage=IRUsage(
                         output_tokens=usage.get("output_tokens", 0),
-                    ) if usage else None,
+                    )
+                    if usage
+                    else None,
                 )
             )
 
@@ -727,10 +737,22 @@ class AnthropicMessagesEncoder:
         """Encode IR response to Anthropic Messages format."""
         # Encode content blocks
         content = []
+        has_tool_use = False
         for block in ir.content:
             encoded = self._encode_content_block(block)
             if encoded:
                 content.append(encoded)
+            # Check if any block is a tool_use block
+            if isinstance(block, IRToolUseBlock):
+                has_tool_use = True
+
+        # Determine stop_reason:
+        # If response contains tool_use blocks, stop_reason should be "tool_use"
+        # regardless of the original stop_reason
+        if has_tool_use:
+            stop_reason = "tool_use"
+        else:
+            stop_reason = self._map_stop_reason(ir.stop_reason)
 
         response: Dict[str, Any] = {
             "id": ir.id if ir.id.startswith("msg_") else f"msg_{ir.id}",
@@ -738,7 +760,7 @@ class AnthropicMessagesEncoder:
             "role": "assistant",
             "model": ir.model,
             "content": content,
-            "stop_reason": self._map_stop_reason(ir.stop_reason),
+            "stop_reason": stop_reason,
         }
 
         if ir.stop_sequence:
@@ -751,9 +773,13 @@ class AnthropicMessagesEncoder:
                 "output_tokens": ir.usage.output_tokens,
             }
             if ir.usage.cache_creation_tokens:
-                response["usage"]["cache_creation_input_tokens"] = ir.usage.cache_creation_tokens
+                response["usage"]["cache_creation_input_tokens"] = (
+                    ir.usage.cache_creation_tokens
+                )
             if ir.usage.cache_read_tokens:
-                response["usage"]["cache_read_input_tokens"] = ir.usage.cache_read_tokens
+                response["usage"]["cache_read_input_tokens"] = (
+                    ir.usage.cache_read_tokens
+                )
 
         return response
 
@@ -815,7 +841,10 @@ class AnthropicMessagesEncoder:
             if ir_event.delta_type == "text":
                 delta = {"type": "text_delta", "text": ir_event.delta_text}
             elif ir_event.delta_type == "input_json":
-                delta = {"type": "input_json_delta", "partial_json": ir_event.delta_json}
+                delta = {
+                    "type": "input_json_delta",
+                    "partial_json": ir_event.delta_json,
+                }
             elif ir_event.delta_type == "thinking":
                 delta = {"type": "thinking_delta", "thinking": ir_event.delta_text}
             else:
@@ -858,14 +887,10 @@ class AnthropicMessagesEncoder:
             )
 
         elif ir_event.type == StreamEventType.DONE:
-            events.append(
-                self._format_event("message_stop", {}, output_format)
-            )
+            events.append(self._format_event("message_stop", {}, output_format))
 
         elif ir_event.type == StreamEventType.PING:
-            events.append(
-                self._format_event("ping", {}, output_format)
-            )
+            events.append(self._format_event("ping", {}, output_format))
 
         elif ir_event.type == StreamEventType.ERROR:
             events.append(

@@ -55,11 +55,13 @@ from tests.fixtures import (
     OPENAI_CHAT_SIMPLE_RESPONSE,
     OPENAI_CHAT_STREAM_CHUNKS,
     OPENAI_CHAT_TOOL_CALL_RESPONSE,
+    OPENAI_CHAT_TOOL_CALL_RESPONSE_WRONG_FINISH_REASON,
     OPENAI_CHAT_TOOL_RESULT_REQUEST,
     OPENAI_CHAT_WITH_BASE64_IMAGE_REQUEST,
     OPENAI_CHAT_WITH_SYSTEM_REQUEST,
     OPENAI_CHAT_WITH_TOOLS_REQUEST,
     # OpenAI Responses fixtures
+    OPENAI_RESPONSES_MULTIMODAL_REQUEST,
     OPENAI_RESPONSES_SIMPLE_REQUEST,
     OPENAI_RESPONSES_SIMPLE_RESPONSE,
     OPENAI_RESPONSES_TOOL_CALL_RESPONSE,
@@ -205,6 +207,24 @@ class TestOpenAIChatToAnthropicMessages:
         # Anthropic uses input (object) instead of arguments (string)
         assert isinstance(tool_uses[0]["input"], dict)
 
+    def test_tool_call_response_with_wrong_finish_reason(self):
+        """Test tool call response conversion when finish_reason is incorrectly set to 'stop'.
+
+        Some OpenAI-compatible providers return finish_reason='stop' even when
+        the response contains tool_calls. The converter should detect this and
+        set stop_reason='tool_use' in the Anthropic response.
+        """
+        result = openai_chat_to_anthropic_messages_response(
+            OPENAI_CHAT_TOOL_CALL_RESPONSE_WRONG_FINISH_REASON
+        )
+
+        # Even though the original finish_reason was "stop", it should be "tool_use"
+        assert result["stop_reason"] == "tool_use"
+        tool_uses = [c for c in result["content"] if c["type"] == "tool_use"]
+        assert len(tool_uses) == 1
+        assert tool_uses[0]["name"] == "get_server_status"
+        assert isinstance(tool_uses[0]["input"], dict)
+
     def test_temperature_clamping(self):
         """Test that temperature is clamped to Anthropic's range."""
         request = {
@@ -235,6 +255,32 @@ class TestOpenAIResponsesToOpenAIChat:
         assert result["model"] == "gpt-4o"
         assert result["max_completion_tokens"] == 100
         assert "messages" in result
+
+    def test_multimodal_request_with_input_text_and_input_image(self):
+        """Test multimodal request with input_text and input_image types."""
+        result = openai_responses_to_openai_chat_request(
+            OPENAI_RESPONSES_MULTIMODAL_REQUEST
+        )
+
+        assert result["model"] == "gpt-4o"
+        assert result["max_completion_tokens"] == 500
+        assert "messages" in result
+        assert len(result["messages"]) == 1
+
+        # Check message content
+        content = result["messages"][0]["content"]
+        assert isinstance(content, list)
+        assert len(content) == 2
+
+        # Check text block
+        text_block = content[0]
+        assert text_block["type"] == "text"
+        assert text_block["text"] == "What is in this image?"
+
+        # Check image block
+        image_block = content[1]
+        assert image_block["type"] == "image_url"
+        assert image_block["image_url"]["url"] == "https://example.com/image.jpg"
 
     def test_request_with_instructions(self):
         """Test request with instructions conversion."""
@@ -300,6 +346,32 @@ class TestOpenAIResponsesToAnthropicMessages:
         assert result["model"] == "gpt-4o"
         assert result["max_tokens"] == 100
         assert len(result["messages"]) == 1
+
+    def test_multimodal_request_with_input_text_and_input_image(self):
+        """Test multimodal request with input_text and input_image types."""
+        result = openai_responses_to_anthropic_messages_request(
+            OPENAI_RESPONSES_MULTIMODAL_REQUEST
+        )
+
+        assert result["model"] == "gpt-4o"
+        assert result["max_tokens"] == 500
+        assert len(result["messages"]) == 1
+
+        # Check message content
+        content = result["messages"][0]["content"]
+        assert isinstance(content, list)
+        assert len(content) == 2
+
+        # Check text block
+        text_block = content[0]
+        assert text_block["type"] == "text"
+        assert text_block["text"] == "What is in this image?"
+
+        # Check image block
+        image_block = content[1]
+        assert image_block["type"] == "image"
+        assert image_block["source"]["type"] == "url"
+        assert image_block["source"]["url"] == "https://example.com/image.jpg"
 
     def test_request_with_instructions(self):
         """Test request with instructions conversion."""
@@ -400,6 +472,39 @@ class TestAnthropicMessagesToOpenAIResponses:
 
         assert result["model"] == "claude-3-5-sonnet-20241022"
         assert result["max_output_tokens"] == 100
+        # Simple single-message input may be simplified to a string
+        assert "input" in result
+
+    def test_multimodal_request_uses_correct_types(self):
+        """Test that multimodal user messages use input_text and input_image types."""
+        result = anthropic_messages_to_openai_responses_request(
+            ANTHROPIC_MULTIMODAL_REQUEST
+        )
+
+        # Multimodal requests should always use array format
+        assert "input" in result
+        assert isinstance(result["input"], list), "Multimodal input should be an array"
+        assert len(result["input"]) > 0
+
+        # Find the user message
+        user_message = None
+        for item in result["input"]:
+            if item.get("type") == "message" and item.get("role") == "user":
+                user_message = item
+                break
+
+        assert user_message is not None, "User message not found in input"
+        assert "content" in user_message
+        assert isinstance(user_message["content"], list)
+
+        # Check content blocks use the correct types for OpenAI Responses API
+        content_types = [block["type"] for block in user_message["content"]]
+        assert "input_text" in content_types, (
+            f"Expected 'input_text' in content types but got {content_types}"
+        )
+        assert "input_image" in content_types, (
+            f"Expected 'input_image' in content types but got {content_types}"
+        )
 
     def test_request_with_system(self):
         """Test request with system prompt conversion."""

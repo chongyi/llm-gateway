@@ -740,6 +740,14 @@ class OpenAIChatEncoder:
         if tool_calls:
             message["tool_calls"] = tool_calls
 
+        # Determine finish_reason:
+        # If response contains tool_calls, finish_reason should be "tool_calls"
+        # regardless of the original stop_reason
+        if tool_calls:
+            finish_reason = "tool_calls"
+        else:
+            finish_reason = self._map_stop_reason(ir.stop_reason)
+
         # Build response
         response: Dict[str, Any] = {
             "id": ir.id if ir.id.startswith("chatcmpl") else f"chatcmpl-{ir.id}",
@@ -750,7 +758,7 @@ class OpenAIChatEncoder:
                 {
                     "index": ir.choice_index,
                     "message": message,
-                    "finish_reason": self._map_stop_reason(ir.stop_reason),
+                    "finish_reason": finish_reason,
                 }
             ],
         }
