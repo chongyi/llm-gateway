@@ -69,7 +69,10 @@ def test_convert_request_openai_legacy_functions_normalizes_to_tools():
                 {
                     "name": "get_weather",
                     "description": "Get weather",
-                    "parameters": {"type": "object", "properties": {"city": {"type": "string"}}},
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"city": {"type": "string"}},
+                    },
                 }
             ],
             "function_call": {"name": "get_weather"},
@@ -82,7 +85,10 @@ def test_convert_request_openai_legacy_functions_normalizes_to_tools():
     assert isinstance(out_body.get("tools"), list)
     assert out_body["tools"][0]["type"] == "function"
     assert out_body["tools"][0]["function"]["name"] == "get_weather"
-    assert out_body.get("tool_choice") == {"type": "function", "function": {"name": "get_weather"}}
+    assert out_body.get("tool_choice") == {
+        "type": "function",
+        "function": {"name": "get_weather"},
+    }
 
 
 def test_convert_request_openai_to_openai_responses_chat():
@@ -131,7 +137,10 @@ async def test_convert_request_openai_to_anthropic_preserves_tools():
                     "function": {
                         "name": "get_weather",
                         "description": "Get weather",
-                        "parameters": {"type": "object", "properties": {"city": {"type": "string"}}},
+                        "parameters": {
+                            "type": "object",
+                            "properties": {"city": {"type": "string"}},
+                        },
                     },
                 }
             ],
@@ -163,7 +172,10 @@ async def test_convert_request_openai_to_anthropic_preserves_tool_calls_and_user
                         {
                             "id": "call_1",
                             "type": "function",
-                            "function": {"name": "get_weather", "arguments": "{\"city\":\"Paris\"}"},
+                            "function": {
+                                "name": "get_weather",
+                                "arguments": '{"city":"Paris"}',
+                            },
                         }
                     ],
                 }
@@ -174,7 +186,10 @@ async def test_convert_request_openai_to_anthropic_preserves_tool_calls_and_user
                     "function": {
                         "name": "get_weather",
                         "description": "Get weather",
-                        "parameters": {"type": "object", "properties": {"city": {"type": "string"}}},
+                        "parameters": {
+                            "type": "object",
+                            "properties": {"city": {"type": "string"}},
+                        },
                     },
                 }
             ],
@@ -189,7 +204,9 @@ async def test_convert_request_openai_to_anthropic_preserves_tool_calls_and_user
     assert isinstance(out_body.get("messages"), list)
     content = out_body["messages"][0].get("content")
     assert isinstance(content, list)
-    tool_use_blocks = [b for b in content if isinstance(b, dict) and b.get("type") == "tool_use"]
+    tool_use_blocks = [
+        b for b in content if isinstance(b, dict) and b.get("type") == "tool_use"
+    ]
     assert tool_use_blocks
     assert tool_use_blocks[0].get("name") == "get_weather"
     assert tool_use_blocks[0].get("id") == "call_1"
@@ -210,7 +227,10 @@ async def test_convert_request_anthropic_to_openai_preserves_tools():
                 {
                     "name": "get_weather",
                     "description": "Get weather",
-                    "input_schema": {"type": "object", "properties": {"city": {"type": "string"}}},
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {"city": {"type": "string"}},
+                    },
                 }
             ],
             "tool_choice": {"type": "tool", "name": "get_weather"},
@@ -223,7 +243,10 @@ async def test_convert_request_anthropic_to_openai_preserves_tools():
     assert isinstance(out_body.get("tools"), list)
     assert out_body["tools"][0]["type"] == "function"
     assert out_body["tools"][0]["function"]["name"] == "get_weather"
-    assert out_body.get("tool_choice") == {"type": "function", "function": {"name": "get_weather"}}
+    assert out_body.get("tool_choice") == {
+        "type": "function",
+        "function": {"name": "get_weather"},
+    }
 
 
 @pytest.mark.asyncio
@@ -249,7 +272,11 @@ async def test_convert_request_anthropic_to_openai_preserves_tool_calls():
                 {
                     "role": "user",
                     "content": [
-                        {"type": "tool_result", "tool_use_id": "toolu_123", "content": "Sunny"}
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "toolu_123",
+                            "content": "Sunny",
+                        }
                     ],
                 },
             ],
@@ -450,10 +477,22 @@ async def test_convert_stream_anthropic_to_openai():
                 "usage": {"input_tokens": 1, "output_tokens": 0},
             },
         },
-        {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}},
-        {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "Hi"}},
+        {
+            "type": "content_block_start",
+            "index": 0,
+            "content_block": {"type": "text", "text": ""},
+        },
+        {
+            "type": "content_block_delta",
+            "index": 0,
+            "delta": {"type": "text_delta", "text": "Hi"},
+        },
         {"type": "content_block_stop", "index": 0},
-        {"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": {"output_tokens": 2}},
+        {
+            "type": "message_delta",
+            "delta": {"stop_reason": "end_turn"},
+            "usage": {"output_tokens": 2},
+        },
         {"type": "message_stop"},
     ]
     upstream = _agen([f"data: {json.dumps(e)}\n\n".encode() for e in upstream_events])
@@ -470,8 +509,89 @@ async def test_convert_stream_anthropic_to_openai():
 
     assert payloads[-1].strip() == "[DONE]"
     content_payloads = [p for p in payloads if p.strip() not in ("[DONE]", "")]
-    chunk_obj = json.loads(next(p for p in content_payloads if '"chat.completion.chunk"' in p))
+    chunk_obj = json.loads(
+        next(p for p in content_payloads if '"chat.completion.chunk"' in p)
+    )
     assert chunk_obj["choices"][0]["delta"]["content"] == "Hi"
+
+
+@pytest.mark.asyncio
+async def test_convert_stream_anthropic_to_openai_includes_usage():
+    """Test that usage information is included when converting Anthropic stream to OpenAI format."""
+    upstream_events = [
+        {
+            "type": "message_start",
+            "message": {
+                "id": "msg_1",
+                "type": "message",
+                "role": "assistant",
+                "content": [],
+                "model": "claude-3-5-sonnet",
+                "stop_reason": None,
+                "stop_sequence": None,
+                "usage": {"input_tokens": 14},
+            },
+        },
+        {
+            "type": "content_block_start",
+            "index": 0,
+            "content_block": {"type": "text", "text": ""},
+        },
+        {
+            "type": "content_block_delta",
+            "index": 0,
+            "delta": {"type": "text_delta", "text": "Hello!"},
+        },
+        {"type": "content_block_stop", "index": 0},
+        {
+            "type": "message_delta",
+            "delta": {"stop_reason": "end_turn", "stop_sequence": None},
+            "usage": {
+                "input_tokens": 14,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "output_tokens": 16,
+            },
+        },
+        {"type": "message_stop"},
+    ]
+    upstream = _agen([f"data: {json.dumps(e)}\n\n".encode() for e in upstream_events])
+
+    decoder = SSEDecoder()
+    payloads = []
+    async for c in convert_stream_for_user(
+        request_protocol="openai",
+        supplier_protocol="anthropic",
+        upstream=upstream,
+        model="gpt-4o-mini",
+    ):
+        payloads.extend(decoder.feed(c))
+
+    assert payloads[-1].strip() == "[DONE]"
+    content_payloads = [p for p in payloads if p.strip() not in ("[DONE]", "")]
+
+    # Find the usage chunk (should have empty choices array)
+    usage_chunks = [
+        json.loads(p)
+        for p in content_payloads
+        if '"chat.completion.chunk"' in p and '"usage"' in p
+    ]
+    assert len(usage_chunks) >= 1, "Expected at least one chunk with usage information"
+
+    # Find the chunk with empty choices (OpenAI's usage-only chunk format)
+    usage_only_chunk = next(
+        (c for c in usage_chunks if c.get("choices") == []),
+        None,
+    )
+    assert usage_only_chunk is not None, (
+        "Expected a usage chunk with empty choices array"
+    )
+
+    usage = usage_only_chunk.get("usage")
+    assert usage is not None, "Usage should be present in the chunk"
+    assert usage.get("prompt_tokens") == 14, "prompt_tokens should be 14"
+    assert usage.get("completion_tokens") == 16, "completion_tokens should be 16"
+    assert usage.get("total_tokens") == 30, "total_tokens should be 30"
 
 
 @pytest.mark.asyncio
@@ -479,7 +599,12 @@ async def test_convert_stream_openai_responses_to_openai():
     upstream_events = [
         {
             "type": "response.created",
-            "response": {"id": "resp_1", "object": "response", "created_at": 1, "model": "gpt-4o-mini"},
+            "response": {
+                "id": "resp_1",
+                "object": "response",
+                "created_at": 1,
+                "model": "gpt-4o-mini",
+            },
         },
         {"type": "response.output_text.delta", "delta": "Hi"},
         {"type": "response.completed"},

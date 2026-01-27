@@ -15,47 +15,50 @@ import uuid
 from typing import Any, AsyncGenerator, Dict, List, Optional, Union
 
 from .base import (
-    Protocol,
+    ConversionResult,
     IRequestConverter,
     IResponseConverter,
     IStreamConverter,
-    ConversionResult,
+    Protocol,
     ProtocolConversionError,
     ValidationError,
 )
 
 # Import llm_api_converter SDK
 try:
-    import sys
     import os
+    import sys
+
     # Add llm_api_converter to path if needed
     llm_converter_path = os.path.join(
-        os.path.dirname(__file__), '..', '..', '..', '..', 'llm_api_converter'
+        os.path.dirname(__file__), "..", "..", "..", "..", "llm_api_converter"
     )
     if llm_converter_path not in sys.path:
         sys.path.insert(0, os.path.abspath(llm_converter_path))
 
     from api_protocol_converter import (
-        convert_request,
-        convert_response,
         Protocol as SDKProtocol,
     )
+    from api_protocol_converter import (
+        convert_request,
+        convert_response,
+    )
     from api_protocol_converter.converters import (
-        OpenAIChatEncoder,
-        OpenAIChatDecoder,
-        OpenAIResponsesEncoder,
-        OpenAIResponsesDecoder,
-        AnthropicMessagesEncoder,
         AnthropicMessagesDecoder,
+        AnthropicMessagesEncoder,
+        OpenAIChatDecoder,
+        OpenAIChatEncoder,
+        OpenAIResponsesDecoder,
+        OpenAIResponsesEncoder,
     )
     from api_protocol_converter.ir import (
         IRRequest,
         IRResponse,
         IRStreamEvent,
-        StreamEventType,
         StopReason,
+        StreamEventType,
     )
-    from api_protocol_converter.stream import SSEParser, SSEFormatter
+    from api_protocol_converter.stream import SSEFormatter, SSEParser
 
     _HAS_SDK = True
 except ImportError as e:
@@ -320,11 +323,21 @@ class SDKStreamConverter(IStreamConverter):
         elif self._source == Protocol.OPENAI and self._target == Protocol.ANTHROPIC:
             async for chunk in self._convert_openai_to_anthropic(upstream, model):
                 yield chunk
-        elif self._source == Protocol.OPENAI_RESPONSES and self._target == Protocol.OPENAI:
-            async for chunk in self._convert_openai_responses_to_openai(upstream, model):
+        elif (
+            self._source == Protocol.OPENAI_RESPONSES
+            and self._target == Protocol.OPENAI
+        ):
+            async for chunk in self._convert_openai_responses_to_openai(
+                upstream, model
+            ):
                 yield chunk
-        elif self._source == Protocol.OPENAI and self._target == Protocol.OPENAI_RESPONSES:
-            async for chunk in self._convert_openai_to_openai_responses(upstream, model):
+        elif (
+            self._source == Protocol.OPENAI
+            and self._target == Protocol.OPENAI_RESPONSES
+        ):
+            async for chunk in self._convert_openai_to_openai_responses(
+                upstream, model
+            ):
                 yield chunk
         else:
             # Generic fallback using SDK
@@ -344,6 +357,7 @@ class SDKStreamConverter(IStreamConverter):
         current_tool_name: Optional[str] = None
         current_tool_index = 0
         done = False
+        final_usage: Optional[Dict[str, Any]] = None
 
         async for chunk in upstream:
             for payload in decoder.feed(chunk):
@@ -363,6 +377,16 @@ class SDKStreamConverter(IStreamConverter):
                     message = data.get("message", {})
                     if isinstance(message, dict):
                         response_id = message.get("id") or response_id
+                        # Extract initial usage from message_start
+                        initial_usage = message.get("usage")
+                        if isinstance(initial_usage, dict):
+                            input_tokens = initial_usage.get("input_tokens", 0)
+                            # Initialize final_usage with input_tokens from message_start
+                            final_usage = {
+                                "prompt_tokens": input_tokens,
+                                "completion_tokens": 0,
+                                "total_tokens": input_tokens,
+                            }
                     continue
 
                 if event_type == "content_block_start":
@@ -464,11 +488,42 @@ class SDKStreamConverter(IStreamConverter):
                     if isinstance(delta_dict, dict):
                         stop_reason = delta_dict.get("stop_reason")
                     finish_reason = _map_anthropic_to_openai_finish_reason(stop_reason)
+
+                    # Extract usage from message_delta
+                    usage_data = data.get("usage")
+                    if isinstance(usage_data, dict):
+                        # Convert Anthropic usage format to OpenAI format
+                        input_tokens = usage_data.get("input_tokens", 0)
+                        output_tokens = usage_data.get("output_tokens", 0)
+                        final_usage = {
+                            "prompt_tokens": input_tokens,
+                            "completion_tokens": output_tokens,
+                            "total_tokens": input_tokens + output_tokens,
+                        }
+                        # Include cache tokens if available
+                        if "cache_creation_input_tokens" in usage_data:
+                            final_usage["prompt_tokens_details"] = {
+                                "cached_tokens": usage_data.get(
+                                    "cache_read_input_tokens", 0
+                                ),
+                            }
+
                     yield _encode_sse_json(
-                        self._create_openai_chunk(
-                            response_id, model, {}, finish_reason
-                        )
+                        self._create_openai_chunk(response_id, model, {}, finish_reason)
                     )
+
+                    # Emit usage chunk before [DONE] (OpenAI format with empty choices)
+                    if final_usage:
+                        usage_chunk = {
+                            "id": response_id or f"chatcmpl-{uuid.uuid4().hex}",
+                            "object": "chat.completion.chunk",
+                            "created": int(time.time()),
+                            "model": model,
+                            "choices": [],
+                            "usage": final_usage,
+                        }
+                        yield _encode_sse_json(usage_chunk)
+
                     yield _encode_sse_data("[DONE]")
                     done = True
                     continue
