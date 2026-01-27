@@ -384,8 +384,9 @@ class SDKStreamConverter(IStreamConverter):
             self._source == Protocol.OPENAI
             and self._target == Protocol.OPENAI_RESPONSES
         ):
+            input_tokens = options.get("input_tokens") if options else None
             async for chunk in self._convert_openai_to_openai_responses(
-                upstream, model
+                upstream, model, input_tokens=input_tokens
             ):
                 yield chunk
         else:
@@ -787,12 +788,13 @@ class SDKStreamConverter(IStreamConverter):
         self,
         upstream: AsyncGenerator[bytes, None],
         model: str,
+        input_tokens: Optional[int] = None,
     ) -> AsyncGenerator[bytes, None]:
         """Convert OpenAI Chat stream to OpenAI Responses format."""
         from app.common.openai_responses import chat_completions_sse_to_responses_sse
 
         async for chunk in chat_completions_sse_to_responses_sse(
-            upstream=upstream, model=model
+            upstream=upstream, model=model, input_tokens=input_tokens
         ):
             yield chunk
 

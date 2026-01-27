@@ -20,24 +20,32 @@ import logging
 from typing import Any, AsyncGenerator, Optional
 
 from app.common.errors import ServiceError
-from app.common.provider_protocols import (
-    ANTHROPIC_PROTOCOL,
-    OPENAI_PROTOCOL,
-    OPENAI_RESPONSES_PROTOCOL,
-    IMPLEMENTATION_PROTOCOLS,
-    resolve_implementation_protocol,
-)
 
 # Import from new modular architecture
 from app.common.protocol import (
-    Protocol,
     ConversionResult,
+    Protocol,
     ProtocolConversionError,
     UnsupportedConversionError,
+)
+from app.common.protocol import (
     convert_request as _convert_request,
+)
+from app.common.protocol import (
     convert_response as _convert_response,
+)
+from app.common.protocol import (
     convert_stream as _convert_stream,
+)
+from app.common.protocol import (
     normalize_protocol as _normalize_protocol,
+)
+from app.common.provider_protocols import (
+    ANTHROPIC_PROTOCOL,
+    IMPLEMENTATION_PROTOCOLS,
+    OPENAI_PROTOCOL,
+    OPENAI_RESPONSES_PROTOCOL,
+    resolve_implementation_protocol,
 )
 
 logger = logging.getLogger(__name__)
@@ -217,6 +225,7 @@ async def convert_stream_for_user(
     supplier_protocol: str,
     upstream: AsyncGenerator[bytes, None],
     model: str,
+    input_tokens: Optional[int] = None,
 ) -> AsyncGenerator[bytes, None]:
     """
     Convert supplier SSE bytes stream to user request protocol SSE bytes stream.
@@ -256,6 +265,9 @@ async def convert_stream_for_user(
             target_protocol=request_protocol,
             upstream=upstream,
             model=model,
+            options={"input_tokens": input_tokens}
+            if input_tokens is not None
+            else None,
         ):
             yield chunk
 

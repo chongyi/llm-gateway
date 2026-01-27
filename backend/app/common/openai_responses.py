@@ -14,6 +14,7 @@ import uuid
 from typing import Any, AsyncGenerator, Optional
 
 from app.common.stream_usage import SSEDecoder
+from app.common.token_counter import get_token_counter
 
 
 def _coerce_openai_content_to_responses(content: Any) -> list[dict[str, Any]]:
@@ -449,14 +450,26 @@ async def chat_completions_sse_to_responses_sse(
     upstream: AsyncGenerator[bytes, None],
     model: str,
     response_id: Optional[str] = None,
+    input_tokens: Optional[int] = None,
 ) -> AsyncGenerator[bytes, None]:
     """
+
+
     Convert OpenAI Chat Completions SSE stream to Responses SSE stream.
 
+
+
+
+
     This is a best-effort compatibility layer focused on text output deltas.
+
+
     """
+
     decoder = SSEDecoder()
+
     resp_id = response_id or _new_id("resp")
+
     msg_id = _new_id("msg")
 
     created = {
@@ -477,39 +490,56 @@ async def chat_completions_sse_to_responses_sse(
             ],
         },
     }
+
     yield f"event: response.created\ndata: {json.dumps(created, ensure_ascii=False)}\n\n".encode(
         "utf-8"
     )
 
     text_parts: list[str] = []
+
     saw_done = False
+
+    final_usage = None
 
     async for chunk in upstream:
         for payload in decoder.feed(chunk):
             if not payload:
                 continue
+
             if payload.strip() == "[DONE]":
                 saw_done = True
+
                 break
 
             try:
                 data = json.loads(payload)
+
             except Exception:
                 continue
 
+            # Try to extract usage from upstream if available (e.g. stream_options: {include_usage: true})
+
+            if "usage" in data and data["usage"]:
+                final_usage = data["usage"]
+
             choices = data.get("choices")
+
             if not isinstance(choices, list):
                 continue
 
             for choice in choices:
                 if not isinstance(choice, dict):
                     continue
+
                 delta = (
                     choice.get("delta") if isinstance(choice.get("delta"), dict) else {}
                 )
+
                 content = delta.get("content")
+
                 if isinstance(content, str) and content:
                     text_parts.append(content)
+
                     evt = {
                         "type": "response.output_text.delta",
                         "delta": content,
@@ -517,6 +547,7 @@ async def chat_completions_sse_to_responses_sse(
                         "content_index": 0,
                         "item_id": msg_id,
                     }
+
                     yield f"event: response.output_text.delta\ndata: {json.dumps(evt, ensure_ascii=False)}\n\n".encode(
                         "utf-8"
                     )
@@ -525,6 +556,32 @@ async def chat_completions_sse_to_responses_sse(
             break
 
     final_text = "".join(text_parts)
+
+    # Calculate usage if not provided by upstream
+
+    if not final_usage:
+        token_counter = get_token_counter("openai")
+
+        output_tokens = token_counter.count_tokens(final_text, model)
+
+        total_input = input_tokens or 0
+
+        final_usage = {
+            "input_tokens": total_input,
+            "output_tokens": output_tokens,
+            "total_tokens": total_input + output_tokens,
+        }
+
+    else:
+        # Normalize usage keys
+
+        if "prompt_tokens" in final_usage:
+            final_usage = {
+                "input_tokens": final_usage.get("prompt_tokens", 0),
+                "output_tokens": final_usage.get("completion_tokens", 0),
+                "total_tokens": final_usage.get("total_tokens", 0),
+            }
+
     completed = {
         "type": "response.completed",
         "response": {
@@ -541,12 +598,14 @@ async def chat_completions_sse_to_responses_sse(
                     "content": [{"type": "output_text", "text": final_text}],
                 }
             ],
-            "usage": None,
+            "usage": final_usage,
         },
     }
+
     yield f"event: response.completed\ndata: {json.dumps(completed, ensure_ascii=False)}\n\n".encode(
         "utf-8"
     )
+
     yield b"data: [DONE]\n\n"
 
 
