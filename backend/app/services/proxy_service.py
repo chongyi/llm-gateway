@@ -842,6 +842,7 @@ class ProxyService:
                             supplier_protocol=supplier_protocol,
                             upstream=upstream_bytes(),
                             model=candidate.target_model,
+                            input_tokens=input_tokens,
                         ):
                             yield out_chunk, first_resp
                 except Exception as e:
