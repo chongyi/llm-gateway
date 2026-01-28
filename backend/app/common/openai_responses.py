@@ -692,15 +692,11 @@ async def responses_sse_to_chat_completions_sse(
                     )
                 continue
 
-                        if event_type == "response.function_call_arguments.delta":
-
-                            item_id = data.get("item_id")
-
-                            delta_args = data.get("delta")
-
-                            if item_id in tool_call_indices and delta_args:
-
-                                tool_index = tool_call_indices[item_id]
+            if event_type == "response.function_call_arguments.delta":
+                item_id = data.get("item_id")
+                delta_args = data.get("delta")
+                if item_id in tool_call_indices and delta_args:
+                    tool_index = tool_call_indices[item_id]
                     delta = {
                         "tool_calls": [
                             {"index": tool_index, "function": {"arguments": delta_args}}
