@@ -606,8 +606,6 @@ async def chat_completions_sse_to_responses_sse(
         "utf-8"
     )
 
-    yield b"data: [DONE]\n\n"
-
 
 async def responses_sse_to_chat_completions_sse(
     *,
