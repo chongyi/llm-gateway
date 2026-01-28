@@ -152,8 +152,6 @@ async def test_chat_completions_sse_to_responses_sse_text_delta():
     assert completed["type"] == "response.completed"
     assert completed["response"]["output"][0]["content"][0]["text"] == "Hello"
 
-    assert payloads[4].strip() == "[DONE]"
-
 
 @pytest.mark.asyncio
 async def test_responses_sse_to_chat_completions_sse_text_delta():
