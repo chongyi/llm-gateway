@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -eu
 
-# 颜色输出
+# Color output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -9,22 +9,22 @@ NC='\033[0m' # No Color
 
 RUNNING_URL="${SQUIRREL_RUNNING_URL:-http://127.0.0.1:8000}"
 
-# PostgreSQL 镜像版本（与 docker-compose.yml 保持一致）
+# PostgreSQL image version (must match docker-compose.yml)
 PG_IMAGE="postgres:16-alpine"
 
-# 本地容器配置
+# Local container configuration
 LOCAL_DB_NAME="${POSTGRES_DB:-llm_gateway}"
 LOCAL_DB_USER="${POSTGRES_USER:-llm_gateway}"
 LOCAL_DB_PASSWORD="${POSTGRES_PASSWORD:-llm_gateway_password}"
 
-# 远程数据库配置（从环境变量读取，使用 SYNC_DB_ 前缀）
+# Remote database configuration (read from environment variables with SYNC_DB_ prefix)
 SYNC_DB_HOST="${SYNC_DB_HOST:-}"
 SYNC_DB_PORT="${SYNC_DB_PORT:-5432}"
 SYNC_DB_NAME="${SYNC_DB_NAME:-llm_gateway}"
 SYNC_DB_USER="${SYNC_DB_USER:-}"
 SYNC_DB_PASSWORD="${SYNC_DB_PASSWORD:-}"
 
-# 同步模式标志
+# Sync mode flags
 SYNC_DB=false
 SYNC_DB_CLEAN=false
 
@@ -79,16 +79,16 @@ ensure_data_dir() {
   mkdir -p ./data
 }
 
-# 等待 PostgreSQL 容器就绪
+# Wait for PostgreSQL container to be ready
 wait_for_postgres() {
     local container_name="$1"
     local max_attempts=30
     local attempt=1
 
-    log_info "等待 PostgreSQL 容器就绪..."
+    log_info "Waiting for PostgreSQL container to be ready..."
     while [ $attempt -le $max_attempts ]; do
         if docker exec "${container_name}" pg_isready -U "${LOCAL_DB_USER}" -d "${LOCAL_DB_NAME}" >/dev/null 2>&1; then
-            log_info "PostgreSQL 容器已就绪"
+            log_info "PostgreSQL container is ready"
             return 0
         fi
         printf "."
@@ -96,82 +96,82 @@ wait_for_postgres() {
         attempt=$((attempt + 1))
     done
     echo ""
-    log_error "PostgreSQL 容器启动超时"
+    log_error "PostgreSQL container startup timeout"
     return 1
 }
 
-# 清理本地数据库数据
+# Clean local database data
 clean_local_database() {
     local postgres_container="$1"
 
-    log_info "清理本地数据库数据..."
+    log_info "Cleaning local database data..."
 
-    # 使用 DROP SCHEMA ... CASCADE 清空所有表，然后重建 schema
-    # 这种方式不需要断开连接，也不需要删除数据库
+    # Use DROP SCHEMA ... CASCADE to clear all tables, then recreate schema
+    # This approach doesn't require disconnecting connections or dropping the database
     if ! docker exec "$postgres_container" \
         psql -U "${LOCAL_DB_USER}" -d "${LOCAL_DB_NAME}" -c \
         "DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO ${LOCAL_DB_USER}; GRANT ALL ON SCHEMA public TO public;" >/dev/null 2>&1; then
-        log_error "清理数据库失败"
+        log_error "Failed to clean database"
         return 1
     fi
 
-    log_info "本地数据库已清理"
+    log_info "Local database cleaned"
 }
 
-# 从远程数据库同步数据
+# Sync data from remote database
 sync_remote_database() {
-    # 验证必需的环境变量
+    # Validate required environment variables
     if [ -z "$SYNC_DB_HOST" ]; then
-        log_error "缺少远程数据库主机地址 (SYNC_DB_HOST)"
-        log_info "请设置以下环境变量:"
-        log_info "  SYNC_DB_HOST     - 远程数据库主机地址 (必需)"
-        log_info "  SYNC_DB_PORT     - 远程数据库端口 (默认: 5432)"
-        log_info "  SYNC_DB_NAME     - 远程数据库名称 (默认: llm_gateway)"
-        log_info "  SYNC_DB_USER     - 远程数据库用户名 (必需)"
-        log_info "  SYNC_DB_PASSWORD - 远程数据库密码 (必需)"
+        log_error "Missing remote database host address (SYNC_DB_HOST)"
+        log_info "Please set the following environment variables:"
+        log_info "  SYNC_DB_HOST     - Remote database host address (required)"
+        log_info "  SYNC_DB_PORT     - Remote database port (default: 5432)"
+        log_info "  SYNC_DB_NAME     - Remote database name (default: llm_gateway)"
+        log_info "  SYNC_DB_USER     - Remote database username (required)"
+        log_info "  SYNC_DB_PASSWORD - Remote database password (required)"
         return 1
     fi
 
     if [ -z "$SYNC_DB_USER" ]; then
-        log_error "缺少远程数据库用户名 (SYNC_DB_USER)"
+        log_error "Missing remote database username (SYNC_DB_USER)"
         return 1
     fi
 
     if [ -z "$SYNC_DB_PASSWORD" ]; then
-        log_error "缺少远程数据库密码 (SYNC_DB_PASSWORD)"
+        log_error "Missing remote database password (SYNC_DB_PASSWORD)"
         return 1
     fi
 
-    # 获取 postgres 容器名称
+    # Get postgres container name
     local postgres_container
     postgres_container=$(docker compose ps -q postgres 2>/dev/null || compose ps -q postgres)
 
     if [ -z "$postgres_container" ]; then
-        log_error "无法找到 PostgreSQL 容器"
+        log_error "Unable to find PostgreSQL container"
         return 1
     fi
 
-    # 等待容器就绪
+    # Wait for container to be ready
     wait_for_postgres "$postgres_container" || return 1
 
-    # 临时文件
+    # Temporary file
     local dump_file="/tmp/pg_dump_$(date +%Y%m%d_%H%M%S).sql"
 
-    log_info "从远程数据库导出数据..."
-    log_info "远程主机: ${SYNC_DB_HOST}:${SYNC_DB_PORT}"
-    log_info "远程数据库: ${SYNC_DB_NAME}"
+    log_info "Exporting data from remote database..."
+    log_info "Remote host: ${SYNC_DB_HOST}:${SYNC_DB_PORT}"
+    log_info "Remote database: ${SYNC_DB_NAME}"
 
-    # 使用 Docker 容器中的 pg_dump 来导出远程数据库
-    # --no-owner --no-privileges: 不导出权限相关信息
-    # --disable-triggers: 导入时禁用触发器，避免外键约束问题
+    # Use pg_dump in Docker container to export remote database
+    # --no-owner --no-privileges: Don't export permission-related information
+    # --disable-triggers: Disable triggers during import to avoid foreign key constraint issues
     local pg_dump_opts="--no-owner --no-privileges --disable-triggers"
     if [ "$SYNC_DB_CLEAN" = false ]; then
         pg_dump_opts="--clean --if-exists ${pg_dump_opts}"
     fi
 
     local dump_error_file="/tmp/pg_dump_error_$$.log"
-    # 直接在 docker compose 的 postgres 容器中执行 pg_dump
-    # 这样可以确保网络连接正常（避免 macOS 上 --network host 的问题）
+    # Execute pg_dump directly in docker compose's postgres container
+    # This ensures proper network connectivity (avoids --network host issues on macOS)
     if ! docker exec \
         -e PGPASSWORD="${SYNC_DB_PASSWORD}" \
         "$postgres_container" \
@@ -184,9 +184,9 @@ sync_remote_database() {
         --inserts \
         $pg_dump_opts \
         > "${dump_file}" 2>"${dump_error_file}"; then
-        log_error "数据库导出失败"
+        log_error "Database export failed"
         if [ -s "$dump_error_file" ]; then
-            log_error "错误详情: $(cat "$dump_error_file")"
+            log_error "Error details: $(cat "$dump_error_file")"
         fi
         rm -f "$dump_file" "$dump_error_file"
         return 1
@@ -194,17 +194,17 @@ sync_remote_database() {
     rm -f "$dump_error_file"
 
     if [ ! -s "$dump_file" ]; then
-        log_error "数据库导出失败或数据为空"
+        log_error "Database export failed or data is empty"
         rm -f "$dump_file"
         return 1
     fi
 
     local dump_size
     dump_size=$(du -h "$dump_file" | cut -f1)
-    log_info "数据导出完成，文件大小: ${dump_size}"
+    log_info "Data export completed, file size: ${dump_size}"
 
-    # 导出成功后，如果指定了清理选项，再清理本地数据库
-    # 这样可以减少系统停机时间
+    # After successful export, clean local database if clean option is specified
+    # This reduces system downtime
     if [ "$SYNC_DB_CLEAN" = true ]; then
         clean_local_database "$postgres_container" || {
             rm -f "$dump_file"
@@ -212,43 +212,43 @@ sync_remote_database() {
         }
     fi
 
-    log_info "将数据导入到本地容器..."
+    log_info "Importing data to local container..."
     if ! docker exec -i "$postgres_container" \
         psql -U "${LOCAL_DB_USER}" -d "${LOCAL_DB_NAME}" \
         < "${dump_file}" >/dev/null 2>&1; then
-        log_error "数据导入失败"
+        log_error "Data import failed"
         rm -f "$dump_file"
         return 1
     fi
 
     rm -f "$dump_file"
-    log_info "数据同步完成！"
+    log_info "Data sync completed!"
 }
 
 usage() {
     cat <<EOF
-用法: $0 [命令] [选项] [docker compose 参数...]
+Usage: $0 [command] [options] [docker compose args...]
 
-命令:
-  up        启动服务 (默认)
-  down      停止服务
-  restart   重启服务
-  logs      查看日志
-  ps|status 查看服务状态
+Commands:
+  up        Start services (default)
+  down      Stop services
+  restart   Restart services
+  logs      View logs
+  ps|status View service status
 
-选项:
-  --sync-db       启动后从远程数据库同步数据
-  --sync-clean    同步前清理本地数据库数据 (需配合 --sync-db 使用)
-  --help          显示此帮助信息
+Options:
+  --sync-db       Sync data from remote database after startup
+  --sync-clean    Clean local database data before sync (requires --sync-db)
+  --help          Show this help message
 
-数据库同步环境变量:
-  SYNC_DB_HOST     远程数据库主机地址 (必需)
-  SYNC_DB_PORT     远程数据库端口 (默认: 5432)
-  SYNC_DB_NAME     远程数据库名称 (默认: llm_gateway)
-  SYNC_DB_USER     远程数据库用户名 (必需)
-  SYNC_DB_PASSWORD 远程数据库密码 (必需)
+Database sync environment variables:
+  SYNC_DB_HOST     Remote database host address (required)
+  SYNC_DB_PORT     Remote database port (default: 5432)
+  SYNC_DB_NAME     Remote database name (default: llm_gateway)
+  SYNC_DB_USER     Remote database username (required)
+  SYNC_DB_PASSWORD Remote database password (required)
 
-示例:
+Examples:
   $0 up
   $0 up --sync-db
   $0 up --sync-db --sync-clean
@@ -258,7 +258,7 @@ usage() {
 EOF
 }
 
-# 解析参数
+# Parse arguments
 cmd=""
 compose_args=""
 
@@ -291,7 +291,7 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-# 默认命令为 up
+# Default command is up
 cmd="${cmd:-up}"
 
 ensure_env
